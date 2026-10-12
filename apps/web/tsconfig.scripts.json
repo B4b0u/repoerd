@@ -1,0 +1,6 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "types": ["node"] },
+  "include": ["scripts", "test/bundle-size.test.ts", "test/shared/theme-contrast.test.ts"],
+  "exclude": []
+}

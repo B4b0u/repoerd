@@ -1,0 +1,18 @@
+# Example deployment. Put SECRET_KEY in a .env file next to this one (32 characters or more):
+#   echo "SECRET_KEY=$(openssl rand -base64 32)" > .env
+# Serve it behind a reverse proxy that terminates HTTPS, then open https://<your host>/setup.
+services:
+  repoerd:
+    # The 0.1 line: patch releases only. Change it on purpose to upgrade (back up first).
+    image: ghcr.io/b4b0u/repoerd:0.1
+    restart: unless-stopped
+    ports:
+      # Loopback only: a reverse proxy on this host reaches it. Change it if the proxy runs elsewhere.
+      - "127.0.0.1:3000:3000"
+    environment:
+      SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in .env}
+    volumes:
+      - repoerd-data:/data
+
+volumes:
+  repoerd-data:

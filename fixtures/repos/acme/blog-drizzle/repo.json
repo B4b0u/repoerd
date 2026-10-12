@@ -1,0 +1,5 @@
+{
+  "defaultBranch": "main",
+  "branches": { "main": "main", "feature/post-tags": "feature-post-tags" },
+  "forkPoints": { "feature-post-tags": "main-at-fork" }
+}

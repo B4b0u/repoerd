@@ -1,0 +1,31 @@
+{
+  "name": "@repoerd/schema-core",
+  "version": "0.1.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@repoerd/model": "workspace:*",
+    "@liam-hq/schema": "0.6.1",
+    "@swc/core": "1.12.11",
+    "picomatch": "^4.0.7"
+  },
+  "devDependencies": {
+    "@types/picomatch": "^4.0.3"
+  }
+}

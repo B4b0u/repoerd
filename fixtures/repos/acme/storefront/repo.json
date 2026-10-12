@@ -1,0 +1,8 @@
+{
+  "defaultBranch": "main",
+  "branches": {
+    "main": "main",
+    "feature/subscriptions": "feature-subscriptions"
+  },
+  "forkPoints": { "feature-subscriptions": "main-at-fork" }
+}

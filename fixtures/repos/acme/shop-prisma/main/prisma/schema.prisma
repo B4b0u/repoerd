@@ -1,0 +1,56 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  SHIPPED
+}
+
+/// A customer account
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String?
+  orders    Order[]
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("users")
+}
+
+model Product {
+  id         Int         @id @default(autoincrement())
+  name       String
+  priceCents Int         @map("price_cents")
+  orderItems OrderItem[]
+
+  @@map("products")
+}
+
+model Order {
+  id     Int         @id @default(autoincrement())
+  userId String      @map("user_id")
+  status OrderStatus @default(PENDING)
+  user   User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items  OrderItem[]
+
+  @@index([userId])
+  @@map("orders")
+}
+
+model OrderItem {
+  id        Int     @id @default(autoincrement())
+  orderId   Int     @map("order_id")
+  productId Int     @map("product_id")
+  quantity  Int
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product   Product @relation(fields: [productId], references: [id])
+
+  @@map("order_items")
+}

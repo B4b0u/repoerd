@@ -1,0 +1,28 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    groups:
+      npm-minor-and-patch:
+        update-types: ['minor', 'patch']
+    ignore:
+      # Patched with pnpm (patches/): a new version means redoing the patch and bumping CACHE_VERSION.
+      - dependency-name: '@liam-hq/schema'
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ['*']
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    ignore:
+      # Node majors are updated by hand (only even majors are LTS).
+      - dependency-name: node
+        update-types: ['version-update:semver-major']

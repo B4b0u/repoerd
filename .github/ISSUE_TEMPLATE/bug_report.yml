@@ -1,0 +1,52 @@
+name: Bug report
+description: Something does not work as described.
+labels: ['bug']
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        Thank you for the report. For a security issue, do not open an issue: follow SECURITY.md
+        (private vulnerability reporting).
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The version reported by `/healthz` (or the image tag).
+      placeholder: 0.1.0
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Mode
+      options:
+        - Real GitHub (GITHUB_MODE=real)
+        - Demo (GITHUB_MODE=fake)
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: >-
+        For a schema that is detected or drawn wrongly, a minimal Prisma or Drizzle schema that
+        shows it helps the most (never share private code).
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Relevant server logs (`docker compose logs repoerd`), without secrets.
+      render: text
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Browser, reverse proxy, how RepoERD runs (Docker Compose, other).

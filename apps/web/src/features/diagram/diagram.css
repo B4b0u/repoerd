@@ -1,0 +1,321 @@
+.diagram-canvas {
+  position: absolute;
+  inset: 0;
+}
+
+.diagram-canvas .react-flow {
+  --xy-background-color: var(--canvas);
+  --xy-background-pattern-color: var(--dots);
+  --xy-edge-stroke: var(--edge);
+}
+
+.edge-marker-defs {
+  position: absolute;
+  width: 0;
+  height: 0;
+}
+
+.edge-marker {
+  fill: none;
+  stroke: var(--edge);
+  stroke-width: 1.4;
+}
+
+.relationship-edge {
+  stroke-width: 1.4;
+}
+
+.diagram-minimap {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  --xy-minimap-background-color: var(--surface);
+  --xy-minimap-mask-background-color: rgb(0 0 0 / 35%);
+  --xy-minimap-node-background-color: var(--header-bg);
+}
+
+.table-node {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  position: relative;
+  container-type: inline-size;
+}
+
+.table-node__overview-name {
+  display: none;
+}
+
+/* Semantic zoom: geometry (card size, edge handles) is unchanged, only the content switches. */
+.react-flow[data-overview] .table-node__overview-name {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4cqi;
+  overflow: hidden;
+  border-radius: inherit;
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 700;
+  line-height: 1.1;
+  text-align: center;
+  overflow-wrap: anywhere;
+  font-size: min(calc(14px / var(--canvas-zoom, 1)), calc(145cqi / var(--name-length, 10)));
+}
+
+.table-node__header {
+  box-sizing: border-box;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--header-bg);
+}
+
+.table-node__header-icon {
+  flex: none;
+  color: var(--text-muted);
+}
+
+.table-node__title {
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.table-node__columns {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 8px;
+}
+
+.table-node__column {
+  box-sizing: border-box;
+  position: relative;
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--row-border);
+  font-size: 13px;
+}
+
+.table-node__column:last-child {
+  border-bottom: none;
+}
+
+.column-icon {
+  color: var(--text-muted);
+}
+
+.column-icon--key {
+  color: var(--key);
+}
+
+.column-icon--link {
+  color: var(--link);
+}
+
+.table-node__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.table-node__type {
+  max-width: 120px;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-family: ui-monospace, "Cascadia Code", "SF Mono", monospace;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.table-node__handle {
+  width: 1px;
+  height: 1px;
+  min-width: 0;
+  min-height: 0;
+  border: none;
+  background: transparent;
+}
+
+.table-node--name-only .table-node__header {
+  border-bottom: none;
+}
+
+.table-node--name-only .table-node__title {
+  font-size: 15px;
+}
+
+/* Branch comparison: colour and symbol, never colour alone. */
+.table-node--diff-added {
+  border-color: var(--diff-added);
+  box-shadow:
+    0 0 0 1px var(--diff-added),
+    var(--shadow);
+}
+
+.table-node--diff-added .table-node__header {
+  background: color-mix(in srgb, var(--diff-added) 12%, var(--header-bg));
+}
+
+.table-node--diff-removed {
+  border-color: var(--diff-removed);
+  box-shadow:
+    0 0 0 1px var(--diff-removed),
+    var(--shadow);
+}
+
+.table-node--diff-removed .table-node__header {
+  background: color-mix(in srgb, var(--diff-removed) 12%, var(--header-bg));
+}
+
+.table-node--diff-removed .table-node__title {
+  text-decoration: line-through;
+}
+
+.table-node--diff-modified {
+  border-color: var(--diff-modified);
+}
+
+/* Unchanged tables recede until hovered, active or related to the active table. */
+.table-node--diff-unchanged.table-node--none {
+  opacity: 0.45;
+}
+
+.table-node__diff-label,
+.table-node__diff-counts {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.table-node__diff-label--added,
+.table-node__diff-count--added {
+  color: var(--diff-added);
+}
+
+.table-node__diff-label--removed,
+.table-node__diff-count--removed {
+  color: var(--diff-removed);
+}
+
+.table-node__diff-count--modified {
+  color: var(--diff-modified);
+}
+
+.table-node__diff-counts > [aria-hidden] {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.table-node__column--added {
+  background: color-mix(in srgb, var(--diff-added) 13%, transparent);
+}
+
+.table-node__column--removed {
+  background: color-mix(in srgb, var(--diff-removed) 13%, transparent);
+}
+
+.table-node__column--removed .table-node__name {
+  text-decoration: line-through;
+}
+
+.table-node__column--modified {
+  background: color-mix(in srgb, var(--diff-modified) 12%, transparent);
+}
+
+.table-node__column--modified .table-node__type {
+  max-width: 160px;
+  color: var(--diff-modified);
+}
+
+.table-node__diff-mark {
+  position: absolute;
+  left: 3px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.table-node__column--added .table-node__diff-mark {
+  color: var(--diff-added);
+}
+
+.table-node__column--removed .table-node__diff-mark {
+  color: var(--diff-removed);
+}
+
+.table-node__column--modified .table-node__diff-mark {
+  color: var(--diff-modified);
+}
+
+.react-flow[data-overview] .table-node__overview-name {
+  flex-direction: column;
+  gap: 0.3em;
+}
+
+.table-node__overview-name .table-node__diff-label,
+.table-node__overview-name .table-node__diff-counts {
+  margin-left: 0;
+  font-size: 0.6em;
+}
+
+.react-flow__edge-path.relationship-edge--added {
+  stroke: var(--diff-added);
+  stroke-dasharray: 6 4;
+}
+
+.react-flow__edge-path.relationship-edge--removed {
+  stroke: var(--diff-removed);
+  stroke-dasharray: 6 4;
+}
+
+.react-flow__edge-path.relationship-edge--modified {
+  stroke: var(--diff-modified);
+}
+
+.table-node {
+  transition:
+    opacity 120ms ease,
+    border-color 120ms ease;
+}
+
+.table-node--active {
+  border-color: var(--brand);
+  box-shadow:
+    0 0 0 1px var(--brand),
+    var(--shadow);
+}
+
+.table-node--related {
+  border-color: color-mix(in srgb, var(--brand) 55%, var(--border));
+}
+
+.table-node--dimmed {
+  opacity: 0.35;
+}
+
+.react-flow__edge.relationship-edge--highlighted .react-flow__edge-path {
+  stroke: var(--brand);
+  stroke-width: 1.8;
+}
+
+.react-flow__edge.relationship-edge--dimmed {
+  opacity: 0.2;
+}

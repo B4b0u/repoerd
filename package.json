@@ -1,0 +1,43 @@
+{
+  "name": "repoerd",
+  "version": "0.1.0",
+  "description": "Self-hosted ER diagrams of the Prisma and Drizzle schemas in your GitHub repositories, branch by branch.",
+  "private": true,
+  "license": "MIT",
+  "author": "Baptiste Coconnier",
+  "homepage": "https://github.com/B4b0u/repoerd#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/B4b0u/repoerd.git"
+  },
+  "bugs": {
+    "url": "https://github.com/B4b0u/repoerd/issues"
+  },
+  "type": "module",
+  "packageManager": "pnpm@10.28.2",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "coverage": "pnpm --workspace-concurrency=1 --filter \"./apps/*\" --filter \"./packages/*\" exec vitest run --coverage",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "biome check .",
+    "format": "biome check --write .",
+    "depcruise": "depcruise apps packages --config .dependency-cruiser.cjs",
+    "dev": "pnpm --parallel --filter @repoerd/server --filter @repoerd/web dev",
+    "e2e": "pnpm build && pnpm --filter @repoerd/e2e e2e",
+    "verify": "biome ci . && pnpm typecheck && pnpm test && pnpm depcruise && pnpm build && pnpm --filter @repoerd/web check-size"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.15",
+    "@types/node": "^24.19.2",
+    "@vitest/coverage-v8": "5.0.3",
+    "dependency-cruiser": "18.5.0",
+    "playwright": "1.63.0",
+    "tsx": "4.23.15",
+    "typescript": "~5.9.3",
+    "vitest": "5.0.3"
+  }
+}

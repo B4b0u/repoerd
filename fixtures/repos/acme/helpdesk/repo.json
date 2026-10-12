@@ -1,0 +1,8 @@
+{
+  "defaultBranch": "main",
+  "branches": {
+    "main": "main",
+    "feature/sla-escalations": "feature-sla-escalations"
+  },
+  "forkPoints": { "feature-sla-escalations": "main-at-fork" }
+}

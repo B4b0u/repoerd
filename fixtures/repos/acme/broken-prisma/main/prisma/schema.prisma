@@ -1,0 +1,9 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Broken {
+  id Int @id
+  this line is not valid prisma
+}

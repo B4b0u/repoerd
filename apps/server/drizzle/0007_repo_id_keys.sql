@@ -1,0 +1,1 @@
+CREATE INDEX `layouts_repo_idx` ON `layouts` (`repo`);

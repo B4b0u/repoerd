@@ -1,0 +1,1250 @@
+diff --git a/dist/parser/drizzle/postgres/astUtils.js b/dist/parser/drizzle/postgres/astUtils.js
+index f62f97a60b1430657c4f7fd65027fb78d310c529..db24d4a695a66a019037d98af6a0c701a26047a6 100644
+--- a/dist/parser/drizzle/postgres/astUtils.js
++++ b/dist/parser/drizzle/postgres/astUtils.js
+@@ -1,3 +1,4 @@
++// Modified by RepoERD: extractTableCallFromChain finds `<schema>.table(...)` calls under a method chain too.
+ /**
+  * AST manipulation utilities for Drizzle ORM schema parsing
+  */
+@@ -92,6 +93,22 @@ export const extractPgTableFromChain = (callExpr) => {
+     }
+     return null;
+ };
++/**
++ * The base table call of a method chain: `pgTable(...)` or `<schema>.table(...)`, also when
++ * followed by methods such as `.enableRLS()`.
++ */
++export const extractTableCallFromChain = (callExpr) => {
++    if (isPgTableCall(callExpr) || isSchemaTableCall(callExpr)) {
++        return callExpr;
++    }
++    if (callExpr.callee.type === 'MemberExpression') {
++        const baseCall = callExpr.callee.object;
++        if (baseCall.type === 'CallExpression') {
++            return extractTableCallFromChain(baseCall);
++        }
++    }
++    return null;
++};
+ /**
+  * Check if a call expression is a schema.table() call
+  */
+diff --git a/dist/parser/drizzle/postgres/columnParser.js b/dist/parser/drizzle/postgres/columnParser.js
+index 7e9787da9c91b23ee124ab9f19d2d1442a929bae..6e0b2d5a531a2a72c8ddd91aa05858536d9744f0 100644
+--- a/dist/parser/drizzle/postgres/columnParser.js
++++ b/dist/parser/drizzle/postgres/columnParser.js
+@@ -1,3 +1,4 @@
++// Modified by RepoERD: columns say whether their name was explicit (casing); options may be the first argument when the name is omitted.
+ /**
+  * Column definition parsing for Drizzle ORM schema parsing
+  */
+@@ -32,26 +33,34 @@ export const parseColumnFromProperty = (prop) => {
+         return null;
+     // Extract the actual column name from the first argument of the base type call
+     let actualColumnName = columnName; // Default to JS property name
++    let nameExplicit = false;
++    let optionsArg = null;
+     if (current.type === 'CallExpression' && current.arguments.length > 0) {
+         const firstArg = current.arguments[0];
+         const firstArgExpr = getArgumentExpression(firstArg);
+         if (firstArgExpr && isStringLiteral(firstArgExpr)) {
+             actualColumnName = firstArgExpr.value;
++            nameExplicit = true;
++            optionsArg = current.arguments[1] ?? null;
++        }
++        else {
++            // `varchar({ length: 255 })`: no name, the options come first.
++            optionsArg = firstArg;
+         }
+     }
+     const column = {
+         name: actualColumnName,
++        nameExplicit,
+         type: baseType,
+         notNull: false,
+         primaryKey: false,
+         unique: false,
+     };
+-    // Parse type options from second argument (like { length: 255 })
+-    if (current.type === 'CallExpression' && current.arguments.length > 1) {
+-        const secondArg = current.arguments[1];
+-        const secondArgExpr = getArgumentExpression(secondArg);
+-        if (secondArgExpr && isObjectExpression(secondArgExpr)) {
+-            column.typeOptions = parseObjectExpression(secondArgExpr);
++    // Parse type options (like { length: 255 })
++    if (optionsArg) {
++        const optionsExpr = getArgumentExpression(optionsArg);
++        if (optionsExpr && isObjectExpression(optionsExpr)) {
++            column.typeOptions = parseObjectExpression(optionsExpr);
+         }
+     }
+     // Parse method calls in the chain (already parsed above)
+diff --git a/dist/parser/drizzle/postgres/converter.js b/dist/parser/drizzle/postgres/converter.js
+index 5eb14b1d0e454d40677ff11ad93750a58f5cca6a..8e3c7944383a66ed08bbe9db4c3782aef012a987 100644
+--- a/dist/parser/drizzle/postgres/converter.js
++++ b/dist/parser/drizzle/postgres/converter.js
+@@ -1,3 +1,4 @@
++// Modified by RepoERD: tables keep their key (`schema.table`) and Postgres schema, columns say whether their name was explicit, unique/foreign key/check constraints of the extra config.
+ /**
+  * Data conversion logic for Drizzle ORM schema parsing
+  */
+@@ -5,7 +6,7 @@ import { convertDefaultValue, convertDrizzleTypeToPgType, convertReferenceOption
+ /**
+  * Convert Drizzle table definition to internal Table format
+  */
+-const convertToTable = (tableDef, enums = {}, variableToTableMapping = {}) => {
++const convertToTable = (tableDef, enums = {}, variableToTableMapping = {}, tableKey = tableDef.name) => {
+     const columns = {};
+     const constraints = {};
+     const indexes = {};
+@@ -39,6 +40,7 @@ const convertToTable = (tableDef, enums = {}, variableToTableMapping = {}) => {
+             notNull: columnDef.notNull,
+             comment: columnDef.comment || null,
+             check: null,
++            nameExplicit: columnDef.nameExplicit === true,
+         };
+         columns[columnName] = column;
+         // Add primary key constraint
+@@ -113,6 +115,49 @@ const convertToTable = (tableDef, enums = {}, variableToTableMapping = {}) => {
+             type: '',
+         };
+     }
++    // Constraints of the extra config: unique().on(), foreignKey({...}), check()
++    const dbColumnNames = (jsPropertyNames) => jsPropertyNames.map((jsPropertyName) => {
++        const columnDef = tableDef.columns[jsPropertyName];
++        return columnDef ? columnDef.name : jsPropertyName;
++    });
++    for (const constraintDef of tableDef.constraints ?? []) {
++        if (constraintDef.type === 'unique') {
++            constraints[constraintDef.name] = {
++                type: 'UNIQUE',
++                name: constraintDef.name,
++                columnNames: dbColumnNames(constraintDef.columns),
++            };
++        }
++        else if (constraintDef.type === 'check') {
++            constraints[constraintDef.name] = {
++                type: 'CHECK',
++                name: constraintDef.name,
++                detail: constraintDef.detail,
++            };
++        }
++        else if (constraintDef.type === 'foreignKey') {
++            const columnNames = dbColumnNames(constraintDef.columns);
++            const targetTableName = constraintDef.selfReference
++                ? tableKey
++                : variableToTableMapping[constraintDef.targetTable] || constraintDef.targetTable;
++            const constraintName = constraintDef.name ??
++                `${tableDef.name}_${columnNames.join('_')}_${constraintDef.selfReference ? tableDef.name : constraintDef.targetTable}_${constraintDef.targetColumns.join('_')}_fk`;
++            constraints[constraintName] = {
++                type: 'FOREIGN KEY',
++                name: constraintName,
++                columnNames,
++                targetTableName,
++                // JS property names: fixForeignKeyTargetColumnNames maps them to column names
++                targetColumnNames: [...constraintDef.targetColumns],
++                updateConstraint: constraintDef.onUpdate
++                    ? convertReferenceOption(constraintDef.onUpdate)
++                    : 'NO_ACTION',
++                deleteConstraint: constraintDef.onDelete
++                    ? convertReferenceOption(constraintDef.onDelete)
++                    : 'NO_ACTION',
++            };
++        }
++    }
+     // Convert indexes
+     for (const [_, indexDef] of Object.entries(tableDef.indexes)) {
+         // Map JS property names to actual column names
+@@ -131,6 +176,7 @@ const convertToTable = (tableDef, enums = {}, variableToTableMapping = {}) => {
+     }
+     return {
+         name: tableDef.name,
++        schemaName: tableDef.schemaName ?? null,
+         columns,
+         constraints,
+         indexes,
+@@ -166,7 +212,7 @@ export const convertDrizzleTablesToInternal = (drizzleTables, enums, variableToT
+     // Convert Drizzle tables to internal format
+     for (const [tableName, tableDef] of Object.entries(drizzleTables)) {
+         try {
+-            tables[tableName] = convertToTable(tableDef, enums, variableToTableMapping);
++            tables[tableName] = convertToTable(tableDef, enums, variableToTableMapping, tableName);
+         }
+         catch (error) {
+             errors.push(new Error(`Error parsing table ${tableName}: ${error instanceof Error ? error.message : String(error)}`));
+diff --git a/dist/parser/drizzle/postgres/mainParser.js b/dist/parser/drizzle/postgres/mainParser.js
+index 1c79a49e2e1aa8053a0836982ca1f06de6b9f1ec..596eccea26540a007e93cbf05f00070ad5ff7e7d 100644
+--- a/dist/parser/drizzle/postgres/mainParser.js
++++ b/dist/parser/drizzle/postgres/mainParser.js
+@@ -1,11 +1,12 @@
++// Modified by RepoERD: tables keyed `schema.table` outside `public` (pgSchema), chained schema tables, spread columns, views counted and skipped.
+ /**
+  * Main orchestrator for Drizzle ORM schema parsing
+  */
+ import { parseSync } from '@swc/core';
+-import { extractPgTableFromChain, isSchemaTableCall } from './astUtils.js';
++import { extractTableCallFromChain, isSchemaTableCall } from './astUtils.js';
+ import { convertDrizzleEnumsToInternal, convertDrizzleTablesToInternal, } from './converter.js';
+ import { parsePgEnumCall } from './enumParser.js';
+-import { parsePgTableCall, parsePgTableWithComment, parseSchemaTableCall, } from './tableParser.js';
++import { parsePgTableCall, parsePgTableWithComment, parseSchemaTableCall, qualifiedTableName, unwrapExpression, } from './tableParser.js';
+ /**
+  * Parse Drizzle TypeScript schema to extract table definitions using SWC AST
+  */
+@@ -18,27 +19,56 @@ const parseDrizzleSchema = (sourceCode) => {
+     const tables = {};
+     const enums = {};
+     const variableToTableMapping = {};
++    const context = collectModuleContext(ast);
+     // Traverse the AST to find pgTable calls
+-    visitModule(ast, tables, enums, variableToTableMapping);
+-    return { tables, enums, variableToTableMapping };
++    visitModule(ast, tables, enums, variableToTableMapping, context);
++    return { tables, enums, variableToTableMapping, ignoredViews: context.ignoredViews };
+ };
+ /**
+- * Visit and traverse the module AST
++ * The top-level variable declarators of the module.
+  */
+-const visitModule = (module, tables, enums, variableToTableMapping) => {
+-    for (const item of module.body) {
+-        if (item.type === 'VariableDeclaration') {
+-            for (const declarator of item.declarations) {
+-                visitVariableDeclarator(declarator, tables, enums, variableToTableMapping);
+-            }
++const topLevelDeclarators = (module) => module.body.flatMap((item) => {
++    if (item.type === 'VariableDeclaration')
++        return item.declarations;
++    if (item.type === 'ExportDeclaration' && item.declaration?.type === 'VariableDeclaration') {
++        return item.declaration.declarations;
++    }
++    return [];
++});
++/**
++ * What table definitions may refer to: `pgSchema('x')` variables and top-level object literals
++ * (spread columns). Collected first, so the order of the files does not matter.
++ */
++const collectModuleContext = (module) => {
++    const schemaVariables = new Map();
++    const objectLiterals = new Map();
++    for (const declarator of topLevelDeclarators(module)) {
++        if (declarator.id.type !== 'Identifier' || !declarator.init)
++            continue;
++        const init = unwrapExpression(declarator.init);
++        if (!init)
++            continue;
++        if (init.type === 'ObjectExpression') {
++            objectLiterals.set(declarator.id.value, init);
+         }
+-        else if (item.type === 'ExportDeclaration' &&
+-            item.declaration?.type === 'VariableDeclaration') {
+-            for (const declarator of item.declaration.declarations) {
+-                visitVariableDeclarator(declarator, tables, enums, variableToTableMapping);
++        else if (init.type === 'CallExpression' &&
++            init.callee.type === 'Identifier' &&
++            init.callee.value === 'pgSchema') {
++            const nameArg = init.arguments[0]?.expression;
++            if (nameArg && nameArg.type === 'StringLiteral') {
++                schemaVariables.set(declarator.id.value, nameArg.value);
+             }
+         }
+     }
++    return { schemaVariables, objectLiterals, ignoredViews: 0 };
++};
++/**
++ * Visit and traverse the module AST
++ */
++const visitModule = (module, tables, enums, variableToTableMapping, context) => {
++    for (const declarator of topLevelDeclarators(module)) {
++        visitVariableDeclarator(declarator, tables, enums, variableToTableMapping, context);
++    }
+ };
+ /**
+  * Check if the call expression is a comment call
+@@ -55,26 +85,37 @@ const isCommentCall = (callExpr) => {
+ const isPgEnumCall = (callExpr) => {
+     return (callExpr.callee.type === 'Identifier' && callExpr.callee.value === 'pgEnum');
+ };
++const isSchemaReference = (expr, context) => (expr.type === 'Identifier' && context.schemaVariables.has(expr.value)) ||
++    (expr.type === 'CallExpression' &&
++        expr.callee.type === 'Identifier' &&
++        expr.callee.value === 'pgSchema');
+ /**
+- * Handle comment calls
++ * `pgView(...)`, `pgMaterializedView(...)`, `<schema>.view(...)`, `<schema>.materializedView(...)`,
++ * with any method chain (`.as(...)`, `.with(...)`).
+  */
+-const handleCommentCall = (declarator, tables, variableToTableMapping) => {
+-    if (declarator.init?.type !== 'CallExpression')
+-        return;
+-    const table = parsePgTableWithComment(declarator.init);
+-    if (table && declarator.id.type === 'Identifier') {
+-        tables[table.name] = table;
+-        variableToTableMapping[declarator.id.value] = table.name;
++const isViewCall = (callExpr, context) => {
++    let current = callExpr;
++    while (current.type === 'CallExpression') {
++        const callee = current.callee;
++        if (callee.type === 'Identifier') {
++            return callee.value === 'pgView' || callee.value === 'pgMaterializedView';
++        }
++        if (callee.type !== 'MemberExpression')
++            return false;
++        if (callee.property.type === 'Identifier' &&
++            (callee.property.value === 'view' || callee.property.value === 'materializedView') &&
++            isSchemaReference(callee.object, context)) {
++            return true;
++        }
++        current = callee.object;
+     }
++    return false;
+ };
+-/**
+- * Handle schema table calls
+- */
+-const handleSchemaTableCall = (declarator, callExpr, tables, variableToTableMapping) => {
+-    const table = parseSchemaTableCall(callExpr);
++const addTable = (declarator, table, tables, variableToTableMapping) => {
+     if (table && declarator.id.type === 'Identifier') {
+-        tables[table.name] = table;
+-        variableToTableMapping[declarator.id.value] = table.name;
++        const key = qualifiedTableName(table.schemaName, table.name);
++        tables[key] = table;
++        variableToTableMapping[declarator.id.value] = key;
+     }
+ };
+ /**
+@@ -89,38 +130,37 @@ const handlePgEnumCall = (declarator, callExpr, enums) => {
+     }
+ };
+ /**
+- * Handle pgTable calls (direct or method chained)
++ * Handle pgTable and `<schema>.table` calls (direct or method chained)
+  */
+-const handlePgTableCall = (declarator, callExpr, tables, variableToTableMapping) => {
+-    const basePgTableCall = extractPgTableFromChain(callExpr);
+-    if (basePgTableCall) {
+-        const table = parsePgTableCall(basePgTableCall);
+-        if (table && declarator.id.type === 'Identifier') {
+-            tables[table.name] = table;
+-            variableToTableMapping[declarator.id.value] = table.name;
+-        }
+-    }
++const handleTableCall = (declarator, callExpr, tables, variableToTableMapping, context) => {
++    const tableCall = extractTableCallFromChain(callExpr);
++    if (!tableCall)
++        return;
++    const table = isSchemaTableCall(tableCall)
++        ? parseSchemaTableCall(tableCall, context)
++        : parsePgTableCall(tableCall, context);
++    addTable(declarator, table, tables, variableToTableMapping);
+ };
+ /**
+  * Visit variable declarator to find pgTable, pgEnum, or relations calls
+  */
+-const visitVariableDeclarator = (declarator, tables, enums, variableToTableMapping) => {
++const visitVariableDeclarator = (declarator, tables, enums, variableToTableMapping, context) => {
+     if (!declarator.init || declarator.init.type !== 'CallExpression') {
+         return;
+     }
+     const callExpr = declarator.init;
+-    // Handle different types of call expressions
+-    if (isCommentCall(declarator.init)) {
+-        handleCommentCall(declarator, tables, variableToTableMapping);
++    if (isViewCall(callExpr, context)) {
++        // Views are not drawn: only counted.
++        context.ignoredViews += 1;
+     }
+-    else if (isSchemaTableCall(callExpr)) {
+-        handleSchemaTableCall(declarator, callExpr, tables, variableToTableMapping);
++    else if (isCommentCall(callExpr)) {
++        addTable(declarator, parsePgTableWithComment(callExpr, context), tables, variableToTableMapping);
+     }
+     else if (isPgEnumCall(callExpr)) {
+         handlePgEnumCall(declarator, callExpr, enums);
+     }
+     else {
+-        handlePgTableCall(declarator, callExpr, tables, variableToTableMapping);
++        handleTableCall(declarator, callExpr, tables, variableToTableMapping, context);
+     }
+ };
+ /**
+@@ -128,17 +168,17 @@ const visitVariableDeclarator = (declarator, tables, enums, variableToTableMappi
+  */
+ const parseDrizzleSchemaString = (schemaString) => {
+     try {
+-        const { tables: drizzleTables, enums, variableToTableMapping, } = parseDrizzleSchema(schemaString);
++        const { tables: drizzleTables, enums, variableToTableMapping, ignoredViews, } = parseDrizzleSchema(schemaString);
+         const { tables, errors } = convertDrizzleTablesToInternal(drizzleTables, enums, variableToTableMapping);
+         const convertedEnums = convertDrizzleEnumsToInternal(enums);
+         return Promise.resolve({
+-            value: { tables, enums: convertedEnums, extensions: {} },
++            value: { tables, enums: convertedEnums, extensions: {}, ignoredViews },
+             errors,
+         });
+     }
+     catch (error) {
+         return Promise.resolve({
+-            value: { tables: {}, enums: {}, extensions: {} },
++            value: { tables: {}, enums: {}, extensions: {}, ignoredViews: 0 },
+             errors: [
+                 new Error(`Error parsing Drizzle schema: ${error instanceof Error ? error.message : String(error)}`),
+             ],
+diff --git a/dist/parser/drizzle/postgres/tableParser.js b/dist/parser/drizzle/postgres/tableParser.js
+index 10dbb83c3871d9a0a5285c305f23f8d69dcee95b..d7bba1c28e0d53186f90cea5a4da4329eee2e343 100644
+--- a/dist/parser/drizzle/postgres/tableParser.js
++++ b/dist/parser/drizzle/postgres/tableParser.js
+@@ -1,14 +1,51 @@
++// Modified by RepoERD: extra config in array form, unique()/foreignKey()/check() entries, spread columns, Postgres schema of `<schema>.table()`.
+ /**
+  * Table structure parsing for Drizzle ORM schema parsing
+  */
+-import { extractPgTableFromChain, getArgumentExpression, getIdentifierName, getStringValue, isObjectExpression, isSchemaTableCall, isStringLiteral, } from './astUtils.js';
++import { extractTableCallFromChain, getArgumentExpression, getIdentifierName, getStringValue, isObjectExpression, isSchemaTableCall, isStringLiteral, } from './astUtils.js';
+ import { parseColumnFromProperty } from './columnParser.js';
+-import { parseObjectExpression } from './expressionParser.js';
+-import { isCompositePrimaryKey, isDrizzleIndex } from './types.js';
++/** Spreads of spreads are followed this deep at most. */
++const MAX_SPREAD_DEPTH = 8;
++/** What a table definition may refer to elsewhere in the module (see mainParser.js). */
++const EMPTY_CONTEXT = { schemaVariables: new Map(), objectLiterals: new Map() };
++/**
++ * The key of a table: `schema.table` outside the default `public` schema, the bare name inside.
++ */
++export const qualifiedTableName = (schemaName, tableName) => schemaName && schemaName !== 'public' ? `${schemaName}.${tableName}` : tableName;
++/**
++ * `x as const`, `x satisfies T`, `(x)`: the expression inside.
++ */
++export const unwrapExpression = (expr) => {
++    let current = expr;
++    while (current &&
++        (current.type === 'ParenthesisExpression' ||
++            current.type === 'TsAsExpression' ||
++            current.type === 'TsConstAssertion' ||
++            current.type === 'TsSatisfiesExpression')) {
++        current = current.expression;
++    }
++    return current ?? null;
++};
++/**
++ * The Postgres schema named by the object of `<schema>.table(...)`: a `pgSchema('x')` variable
++ * or call; null when it cannot be known.
++ */
++const schemaNameOf = (expr, context) => {
++    if (expr.type === 'Identifier') {
++        return context.schemaVariables.get(expr.value) ?? null;
++    }
++    if (expr.type === 'CallExpression' &&
++        expr.callee.type === 'Identifier' &&
++        expr.callee.value === 'pgSchema') {
++        const nameExpr = getArgumentExpression(expr.arguments[0]);
++        return nameExpr && isStringLiteral(nameExpr) ? nameExpr.value : null;
++    }
++    return null;
++};
+ /**
+  * Parse pgTable call with comment method chain
+  */
+-export const parsePgTableWithComment = (commentCallExpr) => {
++export const parsePgTableWithComment = (commentCallExpr, context = EMPTY_CONTEXT) => {
+     // Extract the comment from the call arguments
+     let comment = null;
+     if (commentCallExpr.arguments.length > 0) {
+@@ -18,14 +55,14 @@ export const parsePgTableWithComment = (commentCallExpr) => {
+             comment = commentExpr.value;
+         }
+     }
+-    // Get the pgTable call from the chain - handle complex chaining like pgTable().enableRLS().$comment()
+     if (commentCallExpr.callee.type === 'MemberExpression') {
+         const chainCall = commentCallExpr.callee.object;
+         if (chainCall.type === 'CallExpression') {
+-            // Use extractPgTableFromChain to handle complex method chaining
+-            const pgTableCall = extractPgTableFromChain(chainCall);
+-            if (pgTableCall) {
+-                const table = parsePgTableCall(pgTableCall);
++            const tableCall = extractTableCallFromChain(chainCall);
++            if (tableCall) {
++                const table = isSchemaTableCall(tableCall)
++                    ? parseSchemaTableCall(tableCall, context)
++                    : parsePgTableCall(tableCall, context);
+                 if (table && comment) {
+                     table.comment = comment;
+                 }
+@@ -38,239 +75,286 @@ export const parsePgTableWithComment = (commentCallExpr) => {
+ /**
+  * Parse pgTable call expression
+  */
+-export const parsePgTableCall = (callExpr) => {
+-    if (callExpr.arguments.length < 2)
++export const parsePgTableCall = (callExpr, context = EMPTY_CONTEXT) => parseTableDefinition(callExpr, null, context);
++/**
++ * Parse schema.table() call expression
++ */
++export const parseSchemaTableCall = (callExpr, context = EMPTY_CONTEXT) => {
++    if (!isSchemaTableCall(callExpr))
+         return null;
+-    const tableNameArg = callExpr.arguments[0];
+-    const columnsArg = callExpr.arguments[1];
+-    if (!tableNameArg || !columnsArg)
++    return parseTableDefinition(callExpr, schemaNameOf(callExpr.callee.object, context), context);
++};
++const parseTableDefinition = (callExpr, schemaName, context) => {
++    if (callExpr.arguments.length < 2)
+         return null;
+-    // Extract expression from SWC argument structure
+-    const tableNameExpr = getArgumentExpression(tableNameArg);
+-    const columnsExpr = getArgumentExpression(columnsArg);
++    const tableNameExpr = getArgumentExpression(callExpr.arguments[0]);
++    const columnsExpr = unwrapExpression(getArgumentExpression(callExpr.arguments[1]));
+     const tableName = tableNameExpr ? getStringValue(tableNameExpr) : null;
+     if (!tableName || !columnsExpr || !isObjectExpression(columnsExpr))
+         return null;
+     const table = {
+         name: tableName,
++        schemaName,
+         columns: {},
+         indexes: {},
++        constraints: [],
+     };
+-    // Parse columns from the object expression
+-    for (const prop of columnsExpr.properties) {
+-        if (prop.type === 'KeyValueProperty') {
+-            const column = parseColumnFromProperty(prop);
+-            if (column) {
+-                // Use the JS property name as the key
+-                const jsPropertyName = prop.key.type === 'Identifier' ? getIdentifierName(prop.key) : null;
+-                if (jsPropertyName) {
+-                    table.columns[jsPropertyName] = column;
+-                }
+-            }
+-        }
+-    }
+-    // Parse indexes and composite primary key from third argument if present
++    addColumns(table, columnsExpr, context, 0, new Set());
+     if (callExpr.arguments.length > 2) {
+-        const thirdArg = callExpr.arguments[2];
+-        const thirdArgExpr = getArgumentExpression(thirdArg);
+-        if (thirdArgExpr && thirdArgExpr.type === 'ArrowFunctionExpression') {
+-            // Parse arrow function like (table) => ({ nameIdx: index(...), pk: primaryKey(...) })
+-            let returnExpr = thirdArgExpr.body;
+-            // Handle parenthesized expressions like (table) => ({ ... })
+-            if (returnExpr.type === 'ParenthesisExpression') {
+-                returnExpr = returnExpr.expression;
+-            }
+-            if (returnExpr.type === 'ObjectExpression') {
+-                for (const prop of returnExpr.properties) {
+-                    if (prop.type === 'KeyValueProperty') {
+-                        const indexName = prop.key.type === 'Identifier'
+-                            ? getIdentifierName(prop.key)
+-                            : null;
+-                        if (indexName && prop.value.type === 'CallExpression') {
+-                            const indexDef = parseIndexDefinition(prop.value, indexName);
+-                            if (indexDef) {
+-                                if (isCompositePrimaryKey(indexDef)) {
+-                                    table.compositePrimaryKey = indexDef;
+-                                }
+-                                else if (isDrizzleIndex(indexDef)) {
+-                                    table.indexes[indexName] = indexDef;
+-                                }
+-                            }
+-                        }
+-                    }
+-                }
+-            }
+-        }
++        parseExtraConfig(table, unwrapExpression(getArgumentExpression(callExpr.arguments[2])));
+     }
+     return table;
+ };
+ /**
+- * Parse schema.table() call expression
++ * Columns of an object literal, in order. `...name` adds the columns of a top-level object
++ * literal `name` of the module (files of a source are parsed together). `seen` is shared by the
++ * whole expansion of a table: each literal is expanded once, which ends cycles and keeps fan-outs
++ * linear. A second spread of the same literal would add no key, so the keys and their order are
++ * kept; the value of a key overridden between the two spreads may differ from JS.
+  */
+-export const parseSchemaTableCall = (callExpr) => {
+-    if (!isSchemaTableCall(callExpr) || callExpr.arguments.length < 2)
+-        return null;
+-    // Extract expression from SWC argument structure
+-    const tableNameExpr = getArgumentExpression(callExpr.arguments[0]);
+-    const columnsExpr = getArgumentExpression(callExpr.arguments[1]);
+-    const tableName = tableNameExpr ? getStringValue(tableNameExpr) : null;
+-    if (!tableName || !columnsExpr || !isObjectExpression(columnsExpr))
+-        return null;
+-    const table = {
+-        name: tableName,
+-        columns: {},
+-        indexes: {},
+-    };
+-    // TODO: Handle table name conflicts across different schemas
+-    // Currently, if multiple schemas have tables with the same name (e.g., auth.users and public.users),
+-    // the later one will overwrite the earlier one since we only use the table name without schema prefix.
+-    // This is a limitation shared by other parsers and should be addressed consistently across the codebase.
+-    // ref: https://github.com/liam-hq/liam/discussions/2391
+-    // Parse columns from the object expression
+-    for (const prop of columnsExpr.properties) {
++const addColumns = (table, objectExpr, context, depth, seen) => {
++    for (const prop of objectExpr.properties) {
+         if (prop.type === 'KeyValueProperty') {
+             const column = parseColumnFromProperty(prop);
+-            if (column) {
+-                // Use the JS property name as the key
+-                const jsPropertyName = prop.key.type === 'Identifier' ? getIdentifierName(prop.key) : null;
+-                if (jsPropertyName) {
+-                    table.columns[jsPropertyName] = column;
+-                }
++            // Use the JS property name as the key
++            const jsPropertyName = prop.key.type === 'Identifier' ? getIdentifierName(prop.key) : null;
++            if (column && jsPropertyName) {
++                table.columns[jsPropertyName] = column;
+             }
+         }
+-    }
+-    // Parse indexes and composite primary key from third argument if present
+-    if (callExpr.arguments.length > 2) {
+-        const thirdArg = callExpr.arguments[2];
+-        const thirdArgExpr = getArgumentExpression(thirdArg);
+-        if (thirdArgExpr && thirdArgExpr.type === 'ArrowFunctionExpression') {
+-            // Parse arrow function like (table) => ({ nameIdx: index(...), pk: primaryKey(...) })
+-            let returnExpr = thirdArgExpr.body;
+-            // Handle parenthesized expressions like (table) => ({ ... })
+-            if (returnExpr.type === 'ParenthesisExpression') {
+-                returnExpr = returnExpr.expression;
+-            }
+-            if (returnExpr.type === 'ObjectExpression') {
+-                for (const prop of returnExpr.properties) {
+-                    if (prop.type === 'KeyValueProperty') {
+-                        const indexName = prop.key.type === 'Identifier'
+-                            ? getIdentifierName(prop.key)
+-                            : null;
+-                        if (indexName && prop.value.type === 'CallExpression') {
+-                            const indexDef = parseIndexDefinition(prop.value, indexName);
+-                            if (indexDef) {
+-                                if (isCompositePrimaryKey(indexDef)) {
+-                                    table.compositePrimaryKey = indexDef;
+-                                }
+-                                else if (isDrizzleIndex(indexDef)) {
+-                                    table.indexes[indexName] = indexDef;
+-                                }
+-                            }
+-                        }
+-                    }
+-                }
++        else if (prop.type === 'SpreadElement' &&
++            prop.arguments.type === 'Identifier' &&
++            depth < MAX_SPREAD_DEPTH &&
++            !seen.has(prop.arguments.value)) {
++            const spread = context.objectLiterals.get(prop.arguments.value);
++            if (spread) {
++                seen.add(prop.arguments.value);
++                addColumns(table, spread, context, depth + 1, seen);
+             }
+         }
+     }
+-    return table;
+ };
+ /**
+- * Parse index or primary key definition
++ * The third argument, `(t) => ({ ... })` or `(t) => [ ... ]` (or a block returning either).
+  */
+-const parseIndexDefinition = (callExpr, name) => {
+-    // Handle primaryKey({ columns: [...] })
+-    if (callExpr.callee.type === 'Identifier' &&
+-        callExpr.callee.value === 'primaryKey') {
+-        if (callExpr.arguments.length > 0) {
+-            const configArg = callExpr.arguments[0];
+-            const configExpr = getArgumentExpression(configArg);
+-            if (configExpr && isObjectExpression(configExpr)) {
+-                const config = parseObjectExpression(configExpr);
+-                if (config['columns'] && Array.isArray(config['columns'])) {
+-                    const columns = config['columns'].filter((col) => typeof col === 'string');
+-                    return {
+-                        type: 'primaryKey',
+-                        columns,
+-                    };
+-                }
++const parseExtraConfig = (table, configExpr) => {
++    if (!configExpr || configExpr.type !== 'ArrowFunctionExpression')
++        return;
++    const firstParam = configExpr.params[0];
++    const selfName = firstParam && firstParam.type === 'Identifier' ? firstParam.value : null;
++    let returned = configExpr.body;
++    if (returned.type === 'BlockStatement') {
++        const statement = returned.stmts.find((stmt) => stmt.type === 'ReturnStatement');
++        returned = statement ? statement.argument : null;
++    }
++    returned = unwrapExpression(returned);
++    if (!returned)
++        return;
++    if (returned.type === 'ObjectExpression') {
++        for (const prop of returned.properties) {
++            if (prop.type !== 'KeyValueProperty')
++                continue;
++            const key = prop.key.type === 'Identifier'
++                ? getIdentifierName(prop.key)
++                : getStringValue(prop.key);
++            const value = unwrapExpression(prop.value);
++            if (key && value && value.type === 'CallExpression') {
++                addConfigEntry(table, value, key, selfName);
+             }
+         }
+-        return null;
+     }
+-    // Handle index('name').on(...) or uniqueIndex('name').on(...) with optional .using(...)
+-    let isUnique = false;
+-    let indexName = name;
+-    let indexType = ''; // Index type (btree, gin, gist, etc.)
+-    let currentExpr = callExpr;
+-    // Traverse the method chain to find index(), on(), and using() calls
+-    const methodCalls = [];
+-    while (currentExpr.type === 'CallExpression' &&
+-        currentExpr.callee.type === 'MemberExpression' &&
+-        currentExpr.callee.property.type === 'Identifier') {
+-        const methodName = currentExpr.callee.property.value;
+-        methodCalls.unshift({ method: methodName, expr: currentExpr });
+-        currentExpr = currentExpr.callee.object;
+-    }
+-    // The base should be index() or uniqueIndex()
+-    if (currentExpr.type === 'CallExpression' &&
+-        currentExpr.callee.type === 'Identifier') {
+-        const baseMethod = currentExpr.callee.value;
+-        if (baseMethod === 'index' || baseMethod === 'uniqueIndex') {
+-            isUnique = baseMethod === 'uniqueIndex';
+-            // Get the index name from the first argument
+-            if (currentExpr.arguments.length > 0) {
+-                const nameArg = currentExpr.arguments[0];
+-                const nameExpr = getArgumentExpression(nameArg);
+-                if (nameExpr && isStringLiteral(nameExpr)) {
+-                    indexName = nameExpr.value;
+-                }
++    else if (returned.type === 'ArrayExpression') {
++        for (const element of returned.elements) {
++            const value = element && !element.spread ? unwrapExpression(element.expression) : null;
++            if (value && value.type === 'CallExpression') {
++                addConfigEntry(table, value, null, selfName);
+             }
+         }
+     }
+-    // Parse method chain to extract columns and index type
+-    const columns = [];
+-    for (const { method, expr } of methodCalls) {
+-        if (method === 'on') {
+-            // Parse column references from .on(...) arguments
+-            for (const arg of expr.arguments) {
+-                const argExpr = getArgumentExpression(arg);
+-                if (argExpr &&
+-                    argExpr.type === 'MemberExpression' &&
+-                    argExpr.object.type === 'Identifier' &&
+-                    argExpr.property.type === 'Identifier') {
+-                    columns.push(argExpr.property.value);
+-                }
++};
++/**
++ * `index('x').on(...).using(...)`: the innermost call and the methods called on it, in order.
++ */
++const splitChain = (callExpr) => {
++    const methods = [];
++    let current = callExpr;
++    while (current.type === 'CallExpression' &&
++        current.callee.type === 'MemberExpression' &&
++        current.callee.property.type === 'Identifier') {
++        methods.unshift({ name: current.callee.property.value, args: current.arguments });
++        current = current.callee.object;
++    }
++    return { base: current.type === 'CallExpression' ? current : null, methods };
++};
++/**
++ * `t.name`, also as `t.name.desc()` or `t.name.op('text_ops')`: the variable and the property.
++ */
++const columnReference = (expr) => {
++    let current = unwrapExpression(expr);
++    while (current &&
++        current.type === 'CallExpression' &&
++        current.callee.type === 'MemberExpression') {
++        current = current.callee.object;
++    }
++    if (current &&
++        current.type === 'MemberExpression' &&
++        current.object.type === 'Identifier' &&
++        current.property.type === 'Identifier') {
++        return { table: current.object.value, column: current.property.value };
++    }
++    return null;
++};
++const argumentColumns = (args) => args.flatMap((arg) => {
++    const reference = columnReference(getArgumentExpression(arg));
++    return reference ? [reference.column] : [];
++});
++const arrayReferences = (expr) => {
++    const array = unwrapExpression(expr);
++    if (!array || array.type !== 'ArrayExpression')
++        return [];
++    return array.elements.flatMap((element) => {
++        const reference = element && !element.spread ? columnReference(element.expression) : null;
++        return reference ? [reference] : [];
++    });
++};
++const objectProperty = (objectExpr, name) => {
++    for (const prop of objectExpr.properties) {
++        if (prop.type !== 'KeyValueProperty')
++            continue;
++        const key = prop.key.type === 'Identifier' ? prop.key.value : getStringValue(prop.key);
++        if (key === name)
++            return unwrapExpression(prop.value);
++    }
++    return null;
++};
++const stringArgument = (args, index) => {
++    const expr = args[index] ? getArgumentExpression(args[index]) : null;
++    return expr && isStringLiteral(expr) ? expr.value : null;
++};
++const dbColumnName = (table, jsPropertyName) => table.columns[jsPropertyName]?.name ?? jsPropertyName;
++/**
++ * The SQL of `sql\`...\``, with `${t.column}` written as the column name.
++ */
++const sqlText = (expr, table) => {
++    const value = unwrapExpression(expr);
++    if (!value)
++        return '';
++    if (isStringLiteral(value))
++        return value.value;
++    const template = value.type === 'TaggedTemplateExpression'
++        ? value.template
++        : value.type === 'TemplateLiteral'
++            ? value
++            : null;
++    if (!template)
++        return '';
++    let text = '';
++    template.quasis.forEach((quasi, index) => {
++        text += quasi.cooked ?? quasi.raw;
++        const inserted = template.expressions[index];
++        if (inserted) {
++            const reference = columnReference(inserted);
++            text += reference ? dbColumnName(table, reference.column) : '?';
++        }
++    });
++    return text;
++};
++/**
++ * One entry of the extra config. `key` is the property name in the object form, null in the
++ * array form; `selfName` is the callback parameter (the table itself).
++ */
++const addConfigEntry = (table, callExpr, key, selfName) => {
++    const { base, methods } = splitChain(callExpr);
++    if (!base || base.callee.type !== 'Identifier')
++        return;
++    const columnNames = (columns) => columns.map((column) => dbColumnName(table, column)).join('_');
++    switch (base.callee.value) {
++        case 'primaryKey': {
++            // primaryKey({ columns: [t.a, t.b] }), or the older primaryKey(t.a, t.b)
++            const config = unwrapExpression(getArgumentExpression(base.arguments[0]));
++            const columns = config && config.type === 'ObjectExpression'
++                ? arrayReferences(objectProperty(config, 'columns')).map((ref) => ref.column)
++                : argumentColumns(base.arguments);
++            if (columns.length > 0) {
++                table.compositePrimaryKey = { type: 'primaryKey', columns };
+             }
++            return;
+         }
+-        else if (method === 'using') {
+-            // Parse index type from .using('type', ...) - first argument is the type
+-            if (expr.arguments.length > 0) {
+-                const typeArg = expr.arguments[0];
+-                const typeExpr = getArgumentExpression(typeArg);
+-                if (typeExpr && isStringLiteral(typeExpr)) {
+-                    indexType = typeExpr.value;
++        case 'index':
++        case 'uniqueIndex': {
++            const columns = [];
++            let indexType = '';
++            for (const method of methods) {
++                if (method.name === 'on' || method.name === 'onOnly') {
++                    columns.push(...argumentColumns(method.args));
+                 }
+-            }
+-            // Also parse columns from remaining arguments if present
+-            for (let i = 1; i < expr.arguments.length; i++) {
+-                const arg = expr.arguments[i];
+-                const argExpr = getArgumentExpression(arg);
+-                if (argExpr &&
+-                    argExpr.type === 'MemberExpression' &&
+-                    argExpr.object.type === 'Identifier' &&
+-                    argExpr.property.type === 'Identifier') {
+-                    columns.push(argExpr.property.value);
++                else if (method.name === 'using') {
++                    indexType = stringArgument(method.args, 0) ?? '';
++                    columns.push(...argumentColumns(method.args.slice(1)));
+                 }
+             }
++            if (columns.length === 0)
++                return;
++            const name = stringArgument(base.arguments, 0) ?? key ?? `${table.name}_${columnNames(columns)}_index`;
++            table.indexes[name] = {
++                name,
++                columns,
++                unique: base.callee.value === 'uniqueIndex',
++                type: indexType,
++            };
++            return;
++        }
++        case 'unique': {
++            const columns = methods
++                .filter((method) => method.name === 'on')
++                .flatMap((method) => argumentColumns(method.args));
++            if (columns.length === 0)
++                return;
++            table.constraints.push({
++                type: 'unique',
++                name: stringArgument(base.arguments, 0) ?? `${table.name}_${columnNames(columns)}_unique`,
++                columns,
++            });
++            return;
++        }
++        case 'foreignKey': {
++            const config = unwrapExpression(getArgumentExpression(base.arguments[0]));
++            if (!config || config.type !== 'ObjectExpression')
++                return;
++            const columns = arrayReferences(objectProperty(config, 'columns'));
++            const foreignColumns = arrayReferences(objectProperty(config, 'foreignColumns'));
++            const target = foreignColumns[0];
++            if (!target || columns.length !== foreignColumns.length)
++                return;
++            const nameExpr = objectProperty(config, 'name');
++            const constraint = {
++                type: 'foreignKey',
++                name: nameExpr && isStringLiteral(nameExpr) ? nameExpr.value : null,
++                columns: columns.map((ref) => ref.column),
++                targetTable: target.table,
++                selfReference: target.table === selfName,
++                targetColumns: foreignColumns.map((ref) => ref.column),
++            };
++            for (const method of methods) {
++                const option = stringArgument(method.args, 0);
++                if (method.name === 'onDelete' && option)
++                    constraint.onDelete = option;
++                if (method.name === 'onUpdate' && option)
++                    constraint.onUpdate = option;
++            }
++            table.constraints.push(constraint);
++            return;
++        }
++        case 'check': {
++            const name = stringArgument(base.arguments, 0);
++            if (!name)
++                return;
++            table.constraints.push({
++                type: 'check',
++                name,
++                detail: sqlText(base.arguments[1] ? getArgumentExpression(base.arguments[1]) : null, table),
++            });
++            return;
+         }
+     }
+-    if (columns.length > 0) {
+-        return {
+-            name: indexName,
+-            columns,
+-            unique: isUnique,
+-            type: indexType,
+-        };
+-    }
+-    return null;
+ };
+diff --git a/dist/parser/prisma/parser.js b/dist/parser/prisma/parser.js
+index 00d2e744802278ba2fa1d08f02c2b558155bcc1b..ff79e8283e1567482159907f19a5534b2cba0d29 100644
+--- a/dist/parser/prisma/parser.js
++++ b/dist/parser/prisma/parser.js
+@@ -1,8 +1,17 @@
++// Modified by RepoERD: @@schema tables keyed `schema.table` outside `public` with their Postgres schema, composite @@id primary keys, every column of composite relations, implicit many-to-many tables named and ordered like Prisma, one-to-many self-relations not taken for many-to-many ones.
+ import pkg from '@prisma/internals';
+ import { convertToPostgresColumnType } from './convertToPostgresColumnType.js';
+ // NOTE: Workaround for CommonJS module import issue with @prisma/internals
+ // CommonJS module can not support all module.exports as named exports
+ const { getDMMF } = pkg;
++/**
++ * The key of a table: `schema.table` outside the default `public` schema, the bare name inside.
++ */
++const qualifiedTableName = (schemaName, tableName) => schemaName && schemaName !== 'public' ? `${schemaName}.${tableName}` : tableName;
++/** The table name of a model (`@@map`), without its schema. */
++const tableNameOfModel = (model) => model.dbName || model.name;
++/** The key of a model's table in `tables` (`@@schema` + `@@map`). */
++const tableKeyOfModel = (model) => qualifiedTableName(model.schema, tableNameOfModel(model));
+ const getFieldRenamedIndex = (index, tableFieldsRenaming) => {
+     const fieldsRenaming = tableFieldsRenaming[index.model];
+     if (!fieldsRenaming)
+@@ -47,7 +56,7 @@ function buildFieldRenamingMap(models) {
+     for (const model of models) {
+         for (const field of model.fields) {
+             if (field.dbName) {
+-                const tableName = model.dbName || model.name;
++                const tableName = tableKeyOfModel(model);
+                 const fieldConversions = tableFieldRenaming[tableName] ?? {};
+                 fieldConversions[field.name] = field.dbName;
+                 tableFieldRenaming[tableName] = fieldConversions;
+@@ -64,7 +73,7 @@ function processModelField(field, model, tableFieldRenaming) {
+     const needsTextType = requiresTextType(field);
+     // Check if the field has autoincrement() which affects type
+     const hasAutoincrement = hasAutoincrementFunction(field);
+-    const fieldName = tableFieldRenaming[model.dbName || model.name]?.[field.name] ?? field.name;
++    const fieldName = tableFieldRenaming[tableKeyOfModel(model)]?.[field.name] ?? field.name;
+     let columnType;
+     if (needsTextType && !field.nativeType) {
+         // Only force text type if there's no explicit native type
+@@ -126,7 +135,7 @@ function processModelField(field, model, tableFieldRenaming) {
+ /**
+  * Process a model and create a table
+  */
+-function processModel(model, tableFieldRenaming) {
++function processModel(model, tableFieldRenaming, indexes) {
+     const columns = {};
+     const constraints = {};
+     for (const field of model.fields) {
+@@ -138,8 +147,21 @@ function processModel(model, tableFieldRenaming) {
+             constraints[constraint[0]] = constraint[1];
+         }
+     }
++    // Composite primary key: @@id([a, b])
++    if (model.primaryKey && model.primaryKey.fields.length > 0) {
++        const renaming = tableFieldRenaming[tableKeyOfModel(model)] ?? {};
++        // @@id(map: "x") names the constraint; Prisma's default otherwise
++        const primaryKeyIndex = indexes.find((index) => index.model === model.name && index.type === 'id');
++        const constraintName = primaryKeyIndex?.dbName || `${tableNameOfModel(model)}_pkey`;
++        constraints[constraintName] = {
++            type: 'PRIMARY KEY',
++            name: constraintName,
++            columnNames: model.primaryKey.fields.map((field) => renaming[field] ?? field),
++        };
++    }
+     return {
+-        name: model.dbName || model.name,
++        name: tableNameOfModel(model),
++        schemaName: model.schema ?? null,
+         columns,
+         comment: model.documentation ?? null,
+         indexes: {},
+@@ -149,10 +171,10 @@ function processModel(model, tableFieldRenaming) {
+ /**
+  * Process all models and create tables
+  */
+-function processTables(models, tableFieldRenaming) {
++function processTables(models, tableFieldRenaming, indexes) {
+     const tables = {};
+     for (const model of models) {
+-        tables[model.dbName || model.name] = processModel(model, tableFieldRenaming);
++        tables[tableKeyOfModel(model)] = processModel(model, tableFieldRenaming, indexes);
+     }
+     return tables;
+ }
+@@ -160,7 +182,8 @@ function processTables(models, tableFieldRenaming) {
+  * Get Primary Table Name
+  */
+ function getPrimaryTableNameByType(fieldType, models) {
+-    return models.find((model) => model.name === fieldType)?.dbName ?? fieldType;
++    const model = models.find((candidate) => candidate.name === fieldType);
++    return model ? tableKeyOfModel(model) : fieldType;
+ }
+ /**
+  * Process a relationship field and create foreign key constraint
+@@ -176,21 +199,16 @@ function processRelationshipField(field, model, models, tableFieldRenaming) {
+         return null;
+     // Get the primary table name
+     const primaryTableName = getPrimaryTableNameByType(field.type, models);
+-    // Get the column names
+-    const primaryColumnName = field.relationToFields?.[0] ?? '';
+-    const foreignColumnName = field.relationFromFields?.[0] ?? '';
+-    // Apply field renaming
+-    const foreignTableName = model.dbName || model.name;
+-    const mappedPrimaryColumnName = tableFieldRenaming[primaryTableName]?.[primaryColumnName] ||
+-        primaryColumnName;
+-    const mappedForeignColumnName = tableFieldRenaming[foreignTableName]?.[foreignColumnName] ||
+-        foreignColumnName;
++    // Every column of the relation (composite relations included), with field renaming applied
++    const foreignTableName = tableKeyOfModel(model);
++    const mappedForeignColumnNames = (field.relationFromFields ?? []).map((name) => tableFieldRenaming[foreignTableName]?.[name] || name);
++    const mappedPrimaryColumnNames = (field.relationToFields ?? []).map((name) => tableFieldRenaming[primaryTableName]?.[name] || name);
+     const constraint = {
+         type: 'FOREIGN KEY',
+         name: field.relationName,
+-        columnNames: [mappedForeignColumnName],
++        columnNames: mappedForeignColumnNames,
+         targetTableName: primaryTableName,
+-        targetColumnNames: [mappedPrimaryColumnName],
++        targetColumnNames: mappedPrimaryColumnNames,
+         updateConstraint: 'NO_ACTION',
+         deleteConstraint: normalizeConstraintName(field.relationOnDelete ?? ''),
+     };
+@@ -211,8 +229,7 @@ function processModelConstraints(model, models, tables, tableFieldRenaming, proc
+         const constraint = processRelationshipField(field, model, models, tableFieldRenaming);
+         // Add constraint to table
+         if (constraint) {
+-            const tableName = model.dbName || model.name;
+-            const table = tables[tableName];
++            const table = tables[tableKeyOfModel(model)];
+             if (table) {
+                 table.constraints[constraint.name] = constraint;
+             }
+@@ -236,7 +253,8 @@ function processIndexes(indexes, models, tables, tableFieldRenaming) {
+         const model = models.find((m) => m.name === index.model);
+         return model
+             ? {
+-                model: model.dbName ?? model.name,
++                model: tableKeyOfModel(model),
++                tableName: tableNameOfModel(model),
+                 type: index.type,
+                 isDefinedOnField: index.isDefinedOnField,
+                 fields: index.fields,
+@@ -258,26 +276,21 @@ function processIndexes(indexes, models, tables, tableFieldRenaming) {
+  */
+ function processManyToManyRelationships(manyToManyRelations, tables, models) {
+     for (const relation of manyToManyRelations) {
+-        const table_A = tables[relation.model1];
+-        const table_B = tables[relation.model2];
+-        // Skip if both tables are undefined
+-        if (table_A === undefined && table_B === undefined)
++        const model1 = models.find((model) => model.name === relation.model1);
++        const model2 = models.find((model) => model.name === relation.model2);
++        if (!model1 || !model2)
+             continue;
+-        // Get primary key info for model1 if table_A exists
+-        const model1PrimaryKeyInfo = table_A
+-            ? getPrimaryKeyInfo(table_A, models)
+-            : null;
+-        // Get primary key info for model2 if table_B exists
+-        const model2PrimaryKeyInfo = table_B
+-            ? getPrimaryKeyInfo(table_B, models)
+-            : null;
+-        if (model1PrimaryKeyInfo && model2PrimaryKeyInfo) {
+-            const model1PrimaryKeyColumnType = convertToPostgresColumnType(model1PrimaryKeyInfo.type, null, null);
+-            const model2PrimaryKeyColumnType = convertToPostgresColumnType(model2PrimaryKeyInfo.type, null, null);
+-            const joinTableName = createManyToManyJoinTableName(relation.model1, relation.model2);
+-            // Create join table with constraints
+-            tables[joinTableName] = createManyToManyJoinTableWithConstraints(joinTableName, model1PrimaryKeyColumnType, model2PrimaryKeyColumnType, relation.model1, model1PrimaryKeyInfo.name, relation.model2, model2PrimaryKeyInfo.name);
+-        }
++        const model1PrimaryKeyField = getPrimaryKeyField(model1);
++        const model2PrimaryKeyField = getPrimaryKeyField(model2);
++        if (!model1PrimaryKeyField || !model2PrimaryKeyField)
++            continue;
++        const model1PrimaryKeyColumnType = convertToPostgresColumnType(model1PrimaryKeyField.type, null, null);
++        const model2PrimaryKeyColumnType = convertToPostgresColumnType(model2PrimaryKeyField.type, null, null);
++        const joinTableName = createManyToManyJoinTableName(relation.relationName);
++        const joinTable = createManyToManyJoinTableWithConstraints(joinTableName, model1PrimaryKeyColumnType, model2PrimaryKeyColumnType, tableKeyOfModel(model1), model1PrimaryKeyField.dbName ?? model1PrimaryKeyField.name, tableKeyOfModel(model2), model2PrimaryKeyField.dbName ?? model2PrimaryKeyField.name);
++        // The join table lives in the schema of model A (the first in byte order), as with Prisma.
++        joinTable.schemaName = model1.schema ?? null;
++        tables[qualifiedTableName(model1.schema, joinTableName)] = joinTable;
+     }
+ }
+ /**
+@@ -311,7 +324,7 @@ async function parsePrismaSchema(schemaString) {
+     // Build field renaming map
+     const tableFieldRenaming = buildFieldRenamingMap(dmmf.datamodel.models);
+     // Process models and create tables
+-    const tables = processTables(dmmf.datamodel.models, tableFieldRenaming);
++    const tables = processTables(dmmf.datamodel.models, tableFieldRenaming, dmmf.datamodel.indexes);
+     // Process enums
+     const enums = processEnums(dmmf.datamodel.enums);
+     // Process constraints
+@@ -330,24 +343,26 @@ async function parsePrismaSchema(schemaString) {
+     };
+ }
+ function extractIndex(index) {
++    // Index names use the table name without its schema.
++    const tableName = index.tableName ?? index.model;
+     switch (index.type) {
+         case 'id':
+             return {
+-                name: `${index.model}_pkey`,
++                name: `${tableName}_pkey`,
+                 unique: true,
+                 columns: index.fields.map((field) => field.name),
+                 type: '',
+             };
+         case 'unique':
+             return {
+-                name: `${index.model}_${index.fields.map((field) => field.name).join('_')}_key`,
++                name: `${tableName}_${index.fields.map((field) => field.name).join('_')}_key`,
+                 unique: true,
+                 columns: index.fields.map((field) => field.name),
+                 type: '',
+             };
+         case 'normal':
+             return {
+-                name: `${index.model}_${index.fields.map((field) => field.name).join('_')}_idx`,
++                name: `${tableName}_${index.fields.map((field) => field.name).join('_')}_idx`,
+                 unique: false,
+                 columns: index.fields.map((field) => field.name),
+                 type: index.algorithm ?? '',
+@@ -449,8 +464,9 @@ function normalizeConstraintName(constraint) {
+ /**
+  * Creates the name for a many-to-many join table
+  */
+-function createManyToManyJoinTableName(model1, model2) {
+-    return `_${model1}To${model2}`;
++function createManyToManyJoinTableName(relationName) {
++    // Prisma names the table after the relation (`ModelAToModelB` when the relation is unnamed).
++    return `_${relationName}`;
+ }
+ /**
+  * Creates a join table for a many-to-many relationship
+@@ -532,19 +548,24 @@ function findRelatedField(field, model, models) {
+     const relatedModel = models.find((m) => m.name === field.type);
+     if (!relatedModel)
+         return undefined;
+-    return relatedModel.fields.find((f) => f.relationName === field.relationName &&
++    // A self-relation looks for its other side in the same model: never the field itself.
++    return relatedModel.fields.find((f) => f !== field &&
++        f.relationName === field.relationName &&
+         f.isList &&
+         f.type === model.name);
+ }
+ function getSortedModelPair(model1, model2) {
+-    return model1.localeCompare(model2) < 0 ? [model1, model2] : [model2, model1];
++    // Byte order, like Prisma: model A of `_APIKeyToAccount` is APIKey.
++    return model1 < model2 ? [model1, model2] : [model2, model1];
+ }
+ function storeManyToManyRelation(model1, model2, field1, field2, processedRelations, manyToManyRelations) {
+     const [sortedModel1, sortedModel2] = getSortedModelPair(model1, model2);
+-    const relationId = `${sortedModel1}_${sortedModel2}`;
++    // One join table per relation: two models may share several many-to-many relations.
++    const relationId = field1.relationName;
+     if (!processedRelations.has(relationId)) {
+         processedRelations.add(relationId);
+         manyToManyRelations.push({
++            relationName: relationId,
+             model1: sortedModel1,
+             model2: sortedModel2,
+             field1: field1,
+@@ -561,21 +582,14 @@ function detectAndStoreManyToManyRelation(field, model, models, processedRelatio
+     storeManyToManyRelation(model.name, field.type, field, relatedField, processedRelations, manyToManyRelations);
+     return true;
+ }
+-function getPrimaryKeyInfo(table, models) {
+-    const tableName = table?.name;
+-    const model = models.find((m) => m.name === tableName);
+-    if (!model) {
+-        return null; // or throw an error if model is required
+-    }
+-    const tableIndexes = table?.indexes;
+-    const primaryKeyIndex = tableIndexes[`${tableName}_pkey`];
+-    const primaryKeyColumnName = primaryKeyIndex?.columns[0];
+-    if (!primaryKeyColumnName) {
+-        return null; // no primary key found
+-    }
+-    // Find the field in the model that matches the primary key column name
+-    const primaryKeyField = model.fields.find((field) => field.name === primaryKeyColumnName ||
+-        field.dbName === primaryKeyColumnName);
+-    return primaryKeyField;
++/**
++ * The field of a model's primary key: its @id field, or the first field of its @@id.
++ */
++function getPrimaryKeyField(model) {
++    const idField = model.fields.find((field) => field.isId);
++    if (idField)
++        return idField;
++    const firstName = model.primaryKey?.fields[0];
++    return firstName ? model.fields.find((field) => field.name === firstName) : undefined;
+ }
+ export const processor = (str) => parsePrismaSchema(str);

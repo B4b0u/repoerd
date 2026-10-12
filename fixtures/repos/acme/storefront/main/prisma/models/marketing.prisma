@@ -1,0 +1,75 @@
+enum DiscountKind {
+  PERCENTAGE
+  FIXED_AMOUNT
+
+  @@schema("public")
+}
+
+model Review {
+  id         Int      @id @default(autoincrement())
+  productId  Int      @map("product_id")
+  customerId String   @map("customer_id") @db.Uuid
+  rating     Int      @db.SmallInt
+  title      String?
+  body       String?
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@unique([productId, customerId])
+  @@map("reviews")
+  @@schema("public")
+}
+
+model Coupon {
+  id             Int                @id @default(autoincrement())
+  code           String             @unique
+  kind           DiscountKind
+  value          Int
+  startsAt       DateTime           @map("starts_at")
+  endsAt         DateTime?          @map("ends_at")
+  maxRedemptions Int?               @map("max_redemptions")
+  redemptions    CouponRedemption[]
+
+  @@map("coupons")
+  @@schema("public")
+}
+
+model CouponRedemption {
+  couponId   Int      @map("coupon_id")
+  orderId    Int      @map("order_id")
+  customerId String   @map("customer_id") @db.Uuid
+  coupon     Coupon   @relation(fields: [couponId], references: [id])
+  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  customer   Customer @relation(fields: [customerId], references: [id])
+  redeemedAt DateTime @default(now()) @map("redeemed_at")
+
+  @@id([couponId, orderId])
+  @@map("coupon_redemptions")
+  @@schema("public")
+}
+
+model GiftCard {
+  id           Int                   @id @default(autoincrement())
+  code         String                @unique
+  balanceCents Int                   @map("balance_cents")
+  currency     String                @db.Char(3)
+  expiresAt    DateTime?             @map("expires_at")
+  transactions GiftCardTransaction[]
+
+  @@map("gift_cards")
+  @@schema("public")
+}
+
+model GiftCardTransaction {
+  id          Int      @id @default(autoincrement())
+  giftCardId  Int      @map("gift_card_id")
+  orderId     Int?     @map("order_id")
+  amountCents Int      @map("amount_cents")
+  giftCard    GiftCard @relation(fields: [giftCardId], references: [id], onDelete: Cascade)
+  order       Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("gift_card_transactions")
+  @@schema("public")
+}

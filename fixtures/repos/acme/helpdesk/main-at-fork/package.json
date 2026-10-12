@@ -1,0 +1,12 @@
+{
+  "name": "helpdesk",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "drizzle-orm": "0.45.0",
+    "postgres": "3.4.7"
+  },
+  "devDependencies": {
+    "drizzle-kit": "0.31.0"
+  }
+}

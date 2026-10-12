@@ -1,0 +1,17 @@
+packages:
+  - apps/*
+  - packages/*
+  - e2e
+
+onlyBuiltDependencies:
+  - better-sqlite3
+  - '@swc/core'
+  - esbuild
+
+patchedDependencies:
+  '@liam-hq/schema@0.6.1': patches/@liam-hq__schema@0.6.1.patch
+
+overrides:
+  # @liam-hq/schema 0.6.1 and its @liam-hq/neverthrow pin valibot 1.1.0 (GHSA-vqpr-j7v3-hqw9, GHSA-5qjj-4xww-7phc).
+  '@liam-hq/schema>valibot': ^1.5.0
+  '@liam-hq/neverthrow>valibot': ^1.5.0

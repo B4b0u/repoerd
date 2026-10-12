@@ -1,0 +1,143 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/* Tailwind's dark: variant follows our data-theme attribute (set before the first paint). */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* Palette. Dark is the default theme; light applies when <html data-theme="light">. */
+:root {
+  color-scheme: dark;
+  --bg: #121316;
+  --canvas: #16171b;
+  --dots: #2b2e36;
+  --surface: #1f2126;
+  --surface-raised: #26292f;
+  --header-bg: #2a2d35;
+  --border: #353841;
+  --row-border: #2a2c33;
+  --text: #e8e9ed;
+  --text-muted: #8f95a3;
+  --brand: #8c9dff;
+  --brand-contrast: #12131a;
+  --key: #f1c96b;
+  --link: #8c9dff;
+  --edge: #6e7484;
+  --danger: #ff7070;
+  /* Branch comparison: added, removed, modified (always next to a symbol or a label). */
+  --diff-added: #4ade80;
+  --diff-removed: #fd8a9b;
+  --diff-modified: #fbbf24;
+  --shadow: 0 6px 20px rgb(0 0 0 / 35%);
+
+  /* shadcn/ui tokens, mapped on the palette: they follow the theme through the palette. */
+  --background: var(--bg);
+  --foreground: var(--text);
+  --card: var(--surface);
+  --card-foreground: var(--text);
+  --popover: var(--surface-raised);
+  --popover-foreground: var(--text);
+  --primary: var(--brand);
+  --primary-foreground: var(--brand-contrast);
+  --secondary: var(--surface-raised);
+  --secondary-foreground: var(--text);
+  --muted: var(--surface-raised);
+  --muted-foreground: var(--text-muted);
+  --accent: var(--header-bg);
+  --accent-foreground: var(--text);
+  --destructive: var(--danger);
+  --input: var(--border);
+  --ring: var(--brand);
+  --radius: 0.5rem;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f3f4f7;
+  --canvas: #f7f8fa;
+  --dots: #d4d7de;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --header-bg: #eef0f6;
+  --border: #d8dbe3;
+  --row-border: #eceef2;
+  --text: #1c1d22;
+  --text-muted: #6a6e7a;
+  --brand: #4357d6;
+  --brand-contrast: #ffffff;
+  --key: #8a6310;
+  --link: #4357d6;
+  --edge: #7d8493;
+  --danger: #c92a2a;
+  --diff-added: #126b33;
+  --diff-removed: #b0103a;
+  --diff-modified: #9a4706;
+  --shadow: 0 4px 14px rgb(20 24 40 / 10%);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-canvas: var(--canvas);
+  --color-key: var(--key);
+  --color-diff-added: var(--diff-added);
+  --color-diff-removed: var(--diff-removed);
+  --color-diff-modified: var(--diff-modified);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas, monospace;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-background font-sans text-foreground;
+    font-size: 14px;
+  }
+
+  a {
+    color: var(--brand);
+  }
+}
+
+/* The system asks for less motion (spec §6.5): no transition, no animation, anywhere. The rules
+   of components (React Flow, sonner, Radix, Tailwind) are more specific: only !important wins. */
+/* biome-ignore-start lint/complexity/noImportantStyles: reduced motion must override every component */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+/* biome-ignore-end lint/complexity/noImportantStyles: reduced motion must override every component */

@@ -1,0 +1,39 @@
+/// A person who can sign in and place orders.
+model Customer {
+  id             String             @id @default(uuid()) @db.Uuid
+  email          String             @unique
+  firstName      String             @map("first_name")
+  lastName       String             @map("last_name")
+  phone          String?
+  marketingOptIn Boolean            @default(false) @map("marketing_opt_in")
+  locale         String             @default("en") @db.VarChar(10)
+  addresses      Address[]
+  carts          Cart[]
+  orders         Order[]
+  reviews        Review[]
+  redemptions    CouponRedemption[]
+  createdAt      DateTime           @default(now()) @map("created_at")
+  updatedAt      DateTime           @updatedAt @map("updated_at")
+
+  @@map("customers")
+  @@schema("public")
+}
+
+model Address {
+  id             String   @id @default(uuid()) @db.Uuid
+  customerId     String   @map("customer_id") @db.Uuid
+  label          String?
+  line1          String
+  line2          String?
+  city           String
+  postalCode     String   @map("postal_code")
+  country        String   @db.Char(2)
+  isDefault      Boolean  @default(false) @map("is_default")
+  customer       Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  shippingOrders Order[]  @relation("OrderShippingAddress")
+  billingOrders  Order[]  @relation("OrderBillingAddress")
+
+  @@index([customerId])
+  @@map("addresses")
+  @@schema("public")
+}

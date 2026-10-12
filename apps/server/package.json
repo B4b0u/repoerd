@@ -1,0 +1,36 @@
+{
+  "name": "@repoerd/server",
+  "version": "0.1.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "files": [
+    "dist",
+    "drizzle"
+  ],
+  "scripts": {
+    "dev": "tsx watch --conditions=development --env-file=.env.development --env-file-if-exists=.env src/main.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/main.js",
+    "admin": "tsx --conditions=development --env-file-if-exists=.env.development --env-file-if-exists=.env src/cli.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "db:generate": "drizzle-kit generate"
+  },
+  "dependencies": {
+    "@repoerd/contracts": "workspace:*",
+    "@repoerd/model": "workspace:*",
+    "@repoerd/schema-core": "workspace:*",
+    "@hono/node-server": "^2.1.4",
+    "better-sqlite3": "^12.11.1",
+    "drizzle-orm": "^0.45.4",
+    "hono": "^4.13.13",
+    "pino": "^10.4.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
+    "drizzle-kit": "^0.31.11",
+    "msw": "2.15.0"
+  }
+}

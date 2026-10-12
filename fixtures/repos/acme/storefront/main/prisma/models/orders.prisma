@@ -1,0 +1,173 @@
+enum OrderStatus {
+  PENDING
+  PAID
+  FULFILLED
+  CANCELLED
+  REFUNDED
+
+  @@schema("public")
+}
+
+enum PaymentStatus {
+  PENDING
+  AUTHORIZED
+  CAPTURED
+  FAILED
+  REFUNDED
+
+  @@schema("public")
+}
+
+enum PaymentProvider {
+  STRIPE
+  PAYPAL
+  BANK_TRANSFER
+
+  @@schema("public")
+}
+
+enum ShipmentStatus {
+  PENDING
+  IN_TRANSIT
+  DELIVERED
+  RETURNED
+
+  @@schema("public")
+}
+
+model Cart {
+  id         String     @id @default(uuid()) @db.Uuid
+  customerId String?    @map("customer_id") @db.Uuid
+  currency   String     @db.Char(3)
+  customer   Customer?  @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  items      CartItem[]
+  createdAt  DateTime   @default(now()) @map("created_at")
+  updatedAt  DateTime   @updatedAt @map("updated_at")
+
+  @@map("carts")
+  @@schema("public")
+}
+
+model CartItem {
+  cartId    String         @map("cart_id") @db.Uuid
+  variantId Int            @map("variant_id")
+  quantity  Int
+  cart      Cart           @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  variant   ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  addedAt   DateTime       @default(now()) @map("added_at")
+
+  @@id([cartId, variantId])
+  @@map("cart_items")
+  @@schema("public")
+}
+
+model Order {
+  id                Int                @id @default(autoincrement())
+  number            String             @unique
+  customerId        String             @map("customer_id") @db.Uuid
+  status            OrderStatus        @default(PENDING)
+  currency          String
+  subtotalCents     Int                @map("subtotal_cents")
+  shippingCents     Int                @default(0) @map("shipping_cents")
+  totalCents        Int                @map("total_cents")
+  shippingAddressId String             @map("shipping_address_id") @db.Uuid
+  billingAddressId  String             @map("billing_address_id") @db.Uuid
+  customer          Customer           @relation(fields: [customerId], references: [id])
+  shippingAddress   Address            @relation("OrderShippingAddress", fields: [shippingAddressId], references: [id])
+  billingAddress    Address            @relation("OrderBillingAddress", fields: [billingAddressId], references: [id])
+  items             OrderItem[]
+  payments          Payment[]
+  shipments         Shipment[]
+  redemptions       CouponRedemption[]
+  notes             LegacyOrderNote[]
+  giftCardPayments  GiftCardTransaction[]
+  placedAt          DateTime           @default(now()) @map("placed_at")
+
+  @@index([customerId, placedAt])
+  @@map("orders")
+  @@schema("public")
+}
+
+model OrderItem {
+  id             Int               @id @default(autoincrement())
+  orderId        Int               @map("order_id")
+  variantId      Int               @map("variant_id")
+  quantity       Int
+  unitPriceCents Int               @map("unit_price_cents")
+  order          Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  variant        ProductVariant    @relation(fields: [variantId], references: [id])
+  reservation    StockReservation?
+  shipmentItems  ShipmentItem[]
+
+  @@map("order_items")
+  @@schema("public")
+}
+
+model Payment {
+  id          Int             @id @default(autoincrement())
+  orderId     Int             @map("order_id")
+  provider    PaymentProvider
+  status      PaymentStatus   @default(PENDING)
+  amountCents Int             @map("amount_cents")
+  providerRef String?         @map("provider_ref")
+  order       Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  refunds     Refund[]
+  createdAt   DateTime        @default(now()) @map("created_at")
+
+  @@index([orderId])
+  @@map("payments")
+  @@schema("public")
+}
+
+model Refund {
+  id          Int      @id @default(autoincrement())
+  paymentId   Int      @map("payment_id")
+  amountCents Int      @map("amount_cents")
+  reason      String?
+  payment     Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("refunds")
+  @@schema("public")
+}
+
+model Shipment {
+  id             Int            @id @default(autoincrement())
+  orderId        Int            @map("order_id")
+  warehouseId    Int            @map("warehouse_id")
+  carrier        String
+  trackingNumber String?        @map("tracking_number")
+  status         ShipmentStatus @default(PENDING)
+  order          Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  warehouse      Warehouse      @relation(fields: [warehouseId], references: [id])
+  items          ShipmentItem[]
+  shippedAt      DateTime?      @map("shipped_at")
+  deliveredAt    DateTime?      @map("delivered_at")
+
+  @@map("shipments")
+  @@schema("public")
+}
+
+model ShipmentItem {
+  shipmentId  Int       @map("shipment_id")
+  orderItemId Int       @map("order_item_id")
+  quantity    Int
+  shipment    Shipment  @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  orderItem   OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+
+  @@id([shipmentId, orderItemId])
+  @@map("shipment_items")
+  @@schema("public")
+}
+
+/// Free-text notes of the former back office, read only since the migration.
+model LegacyOrderNote {
+  id        Int      @id @default(autoincrement())
+  orderId   Int      @map("order_id")
+  note      String
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("legacy_order_notes")
+  @@schema("public")
+}

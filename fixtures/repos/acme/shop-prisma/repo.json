@@ -1,0 +1,9 @@
+{
+  "defaultBranch": "main",
+  "branches": {
+    "main": "main",
+    "feature/add-reviews": "feature-add-reviews"
+  },
+  "forkPoints": { "feature-add-reviews": "main" },
+  "formerNames": ["acme/shop"]
+}

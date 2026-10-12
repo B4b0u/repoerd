@@ -1,0 +1,16 @@
+node_modules/
+dist/
+*.tsbuildinfo
+coverage/
+data/
+.env
+.env.local
+.superpowers/
+apps/web/.screenshots/
+e2e/playwright-report/
+e2e/test-results/
+
+# Internal working documents (French): kept on disk, never published. docs/ publishes images only.
+/CLAUDE.md
+/docs/*
+!/docs/images/
