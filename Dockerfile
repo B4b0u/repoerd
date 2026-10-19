@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
 
 # Base image pinned by digest (Dependabot proposes the updates).
-FROM node:24-slim@sha256:d6aa754f16b3197301076f047b5def2f02ea1dbbc2ca920407d46d7ec7f87b20 AS build
+FROM node:24-slim@sha256:a5f4366e834695d5f363b920c104953a535d3a9864d1bdf74566a0ebe01daee5 AS build
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0 PNPM_HOME=/pnpm PATH=/pnpm:$PATH
 RUN corepack enable
 WORKDIR /repo
@@ -30,7 +30,7 @@ RUN find /out/server/node_modules -type f \( -name '*.d.ts' -o -name '*.d.mts' -
            /out/server/node_modules/.pnpm/better-sqlite3@*/node_modules/better-sqlite3/src \
  && rm -rf /out/server/node_modules/.pnpm/typescript@*
 
-FROM node:24-slim@sha256:d6aa754f16b3197301076f047b5def2f02ea1dbbc2ca920407d46d7ec7f87b20
+FROM node:24-slim@sha256:a5f4366e834695d5f363b920c104953a535d3a9864d1bdf74566a0ebe01daee5
 ARG REPOERD_VERSION=dev
 ENV NODE_ENV=production \
     PORT=3000 \
