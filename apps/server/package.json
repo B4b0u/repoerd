@@ -22,7 +22,7 @@
     "@repoerd/model": "workspace:*",
     "@repoerd/schema-core": "workspace:*",
     "@hono/node-server": "^2.1.4",
-    "better-sqlite3": "^12.11.1",
+    "better-sqlite3": "^13.0.3",
     "drizzle-orm": "^0.45.4",
     "hono": "^4.13.13",
     "pino": "^10.4.0",
