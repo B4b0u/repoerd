@@ -21,6 +21,6 @@
   },
   "dependencies": {
     "@repoerd/model": "workspace:*",
-    "zod": "^4.6.5"
+    "zod": "^4.6.6"
   }
 }
