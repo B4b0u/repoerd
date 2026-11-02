@@ -10,7 +10,7 @@ overrides:
 
 patchedDependencies:
   '@liam-hq/schema@0.6.1':
-    hash: b3b0a81c4e4fd92ee2a88524b9d1366d88f9dd3060d194ba881f4e2ab30ab2b7
+    hash: 35ee0f79d9dc8f752094c41c65f82fa6c5083e2dd39b0d926123918d20940232
     path: patches/@liam-hq__schema@0.6.1.patch
 
 importers:
@@ -194,7 +194,7 @@ importers:
     dependencies:
       '@liam-hq/schema':
         specifier: 0.6.1
-        version: 0.6.1(patch_hash=b3b0a81c4e4fd92ee2a88524b9d1366d88f9dd3060d194ba881f4e2ab30ab2b7)(typescript@5.9.3)
+        version: 0.6.1(patch_hash=35ee0f79d9dc8f752094c41c65f82fa6c5083e2dd39b0d926123918d20940232)(typescript@5.9.3)
       '@repoerd/model':
         specifier: workspace:*
         version: link:../model
@@ -3858,7 +3858,7 @@ snapshots:
     transitivePeerDependencies:
       - typescript
 
-  '@liam-hq/schema@0.6.1(patch_hash=b3b0a81c4e4fd92ee2a88524b9d1366d88f9dd3060d194ba881f4e2ab30ab2b7)(typescript@5.9.3)':
+  '@liam-hq/schema@0.6.1(patch_hash=35ee0f79d9dc8f752094c41c65f82fa6c5083e2dd39b0d926123918d20940232)(typescript@5.9.3)':
     dependencies:
       '@liam-hq/neverthrow': 0.0.1(typescript@5.9.3)
       '@prisma/internals': 6.8.2(typescript@5.9.3)

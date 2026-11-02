@@ -174,11 +174,11 @@ index 5eb14b1d0e454d40677ff11ad93750a58f5cca6a..8e3c7944383a66ed08bbe9db4c3782ae
          catch (error) {
              errors.push(new Error(`Error parsing table ${tableName}: ${error instanceof Error ? error.message : String(error)}`));
 diff --git a/dist/parser/drizzle/postgres/mainParser.js b/dist/parser/drizzle/postgres/mainParser.js
-index 1c79a49e2e1aa8053a0836982ca1f06de6b9f1ec..596eccea26540a007e93cbf05f00070ad5ff7e7d 100644
+index 1c79a49e2e1aa8053a0836982ca1f06de6b9f1ec..6484c302ded6446baf6b4ed530f49a1cd30c614f 100644
 --- a/dist/parser/drizzle/postgres/mainParser.js
 +++ b/dist/parser/drizzle/postgres/mainParser.js
 @@ -1,11 +1,12 @@
-+// Modified by RepoERD: tables keyed `schema.table` outside `public` (pgSchema), chained schema tables, spread columns, views counted and skipped.
++// Modified by RepoERD: tables keyed `schema.table` outside `public` (pgSchema), chained schema tables, spread columns (object literals and functions returning one), views counted and skipped.
  /**
   * Main orchestrator for Drizzle ORM schema parsing
   */
@@ -192,7 +192,7 @@ index 1c79a49e2e1aa8053a0836982ca1f06de6b9f1ec..596eccea26540a007e93cbf05f00070a
  /**
   * Parse Drizzle TypeScript schema to extract table definitions using SWC AST
   */
-@@ -18,27 +19,56 @@ const parseDrizzleSchema = (sourceCode) => {
+@@ -18,27 +19,97 @@ const parseDrizzleSchema = (sourceCode) => {
      const tables = {};
      const enums = {};
      const variableToTableMapping = {};
@@ -222,12 +222,48 @@ index 1c79a49e2e1aa8053a0836982ca1f06de6b9f1ec..596eccea26540a007e93cbf05f00070a
 +    return [];
 +});
 +/**
-+ * What table definitions may refer to: `pgSchema('x')` variables and top-level object literals
-+ * (spread columns). Collected first, so the order of the files does not matter.
++ * The top-level function declarations of the module (`function f() {}`, exported or not).
++ */
++const topLevelFunctions = (module) => module.body.flatMap((item) => {
++    if (item.type === 'FunctionDeclaration')
++        return [item];
++    if (item.type === 'ExportDeclaration' && item.declaration?.type === 'FunctionDeclaration') {
++        return [item.declaration];
++    }
++    return [];
++});
++/**
++ * The object literal a function without parameters returns, when its body is nothing else:
++ * `() => ({ ... })`, or a block reduced to `return { ... }`. Null otherwise (parameters, other
++ * statements, async or generator functions).
++ */
++const returnedObjectLiteral = (fn) => {
++    if (fn.async || fn.generator || fn.params.length > 0 || !fn.body)
++        return null;
++    let returned = fn.body;
++    if (returned.type === 'BlockStatement') {
++        const statement = returned.stmts[0];
++        if (returned.stmts.length !== 1 || statement.type !== 'ReturnStatement')
++            return null;
++        returned = statement.argument;
++    }
++    returned = unwrapExpression(returned);
++    return returned && returned.type === 'ObjectExpression' ? returned : null;
++};
++/**
++ * What table definitions may refer to: `pgSchema('x')` variables, top-level object literals and
++ * top-level functions without parameters that return one (spread columns, `...name` and
++ * `...name()`). Collected first, so the order of the files does not matter.
 + */
 +const collectModuleContext = (module) => {
 +    const schemaVariables = new Map();
 +    const objectLiterals = new Map();
++    const objectFunctions = new Map();
++    for (const fn of topLevelFunctions(module)) {
++        const returned = returnedObjectLiteral(fn);
++        if (returned)
++            objectFunctions.set(fn.identifier.value, returned);
++    }
 +    for (const declarator of topLevelDeclarators(module)) {
 +        if (declarator.id.type !== 'Identifier' || !declarator.init)
 +            continue;
@@ -236,6 +272,11 @@ index 1c79a49e2e1aa8053a0836982ca1f06de6b9f1ec..596eccea26540a007e93cbf05f00070a
 +            continue;
 +        if (init.type === 'ObjectExpression') {
 +            objectLiterals.set(declarator.id.value, init);
++        }
++        else if (init.type === 'ArrowFunctionExpression') {
++            const returned = returnedObjectLiteral(init);
++            if (returned)
++                objectFunctions.set(declarator.id.value, returned);
          }
 -        else if (item.type === 'ExportDeclaration' &&
 -            item.declaration?.type === 'VariableDeclaration') {
@@ -250,7 +291,7 @@ index 1c79a49e2e1aa8053a0836982ca1f06de6b9f1ec..596eccea26540a007e93cbf05f00070a
              }
          }
      }
-+    return { schemaVariables, objectLiterals, ignoredViews: 0 };
++    return { schemaVariables, objectLiterals, objectFunctions, ignoredViews: 0 };
 +};
 +/**
 + * Visit and traverse the module AST
@@ -262,7 +303,7 @@ index 1c79a49e2e1aa8053a0836982ca1f06de6b9f1ec..596eccea26540a007e93cbf05f00070a
  };
  /**
   * Check if the call expression is a comment call
-@@ -55,26 +85,37 @@ const isCommentCall = (callExpr) => {
+@@ -55,26 +126,37 @@ const isCommentCall = (callExpr) => {
  const isPgEnumCall = (callExpr) => {
      return (callExpr.callee.type === 'Identifier' && callExpr.callee.value === 'pgEnum');
  };
@@ -315,7 +356,7 @@ index 1c79a49e2e1aa8053a0836982ca1f06de6b9f1ec..596eccea26540a007e93cbf05f00070a
      }
  };
  /**
-@@ -89,38 +130,37 @@ const handlePgEnumCall = (declarator, callExpr, enums) => {
+@@ -89,38 +171,37 @@ const handlePgEnumCall = (declarator, callExpr, enums) => {
      }
  };
  /**
@@ -370,7 +411,7 @@ index 1c79a49e2e1aa8053a0836982ca1f06de6b9f1ec..596eccea26540a007e93cbf05f00070a
      }
  };
  /**
-@@ -128,17 +168,17 @@ const visitVariableDeclarator = (declarator, tables, enums, variableToTableMappi
+@@ -128,17 +209,17 @@ const visitVariableDeclarator = (declarator, tables, enums, variableToTableMappi
   */
  const parseDrizzleSchemaString = (schemaString) => {
      try {
@@ -392,11 +433,11 @@ index 1c79a49e2e1aa8053a0836982ca1f06de6b9f1ec..596eccea26540a007e93cbf05f00070a
                  new Error(`Error parsing Drizzle schema: ${error instanceof Error ? error.message : String(error)}`),
              ],
 diff --git a/dist/parser/drizzle/postgres/tableParser.js b/dist/parser/drizzle/postgres/tableParser.js
-index 10dbb83c3871d9a0a5285c305f23f8d69dcee95b..d7bba1c28e0d53186f90cea5a4da4329eee2e343 100644
+index 10dbb83c3871d9a0a5285c305f23f8d69dcee95b..6da19461dafe17ca769af74a0ae6a627c2ef83e1 100644
 --- a/dist/parser/drizzle/postgres/tableParser.js
 +++ b/dist/parser/drizzle/postgres/tableParser.js
-@@ -1,14 +1,51 @@
-+// Modified by RepoERD: extra config in array form, unique()/foreignKey()/check() entries, spread columns, Postgres schema of `<schema>.table()`.
+@@ -1,14 +1,55 @@
++// Modified by RepoERD: extra config in array form, unique()/foreignKey()/check() entries, spread columns (object literals and functions returning one), Postgres schema of `<schema>.table()`.
  /**
   * Table structure parsing for Drizzle ORM schema parsing
   */
@@ -408,7 +449,11 @@ index 10dbb83c3871d9a0a5285c305f23f8d69dcee95b..d7bba1c28e0d53186f90cea5a4da4329
 +/** Spreads of spreads are followed this deep at most. */
 +const MAX_SPREAD_DEPTH = 8;
 +/** What a table definition may refer to elsewhere in the module (see mainParser.js). */
-+const EMPTY_CONTEXT = { schemaVariables: new Map(), objectLiterals: new Map() };
++const EMPTY_CONTEXT = {
++    schemaVariables: new Map(),
++    objectLiterals: new Map(),
++    objectFunctions: new Map(),
++};
 +/**
 + * The key of a table: `schema.table` outside the default `public` schema, the bare name inside.
 + */
@@ -451,7 +496,7 @@ index 10dbb83c3871d9a0a5285c305f23f8d69dcee95b..d7bba1c28e0d53186f90cea5a4da4329
      // Extract the comment from the call arguments
      let comment = null;
      if (commentCallExpr.arguments.length > 0) {
-@@ -18,14 +55,14 @@ export const parsePgTableWithComment = (commentCallExpr) => {
+@@ -18,14 +59,14 @@ export const parsePgTableWithComment = (commentCallExpr) => {
              comment = commentExpr.value;
          }
      }
@@ -471,7 +516,7 @@ index 10dbb83c3871d9a0a5285c305f23f8d69dcee95b..d7bba1c28e0d53186f90cea5a4da4329
                  if (table && comment) {
                      table.comment = comment;
                  }
-@@ -38,239 +75,286 @@ export const parsePgTableWithComment = (commentCallExpr) => {
+@@ -38,239 +79,302 @@ export const parsePgTableWithComment = (commentCallExpr) => {
  /**
   * Parse pgTable call expression
   */
@@ -559,11 +604,9 @@ index 10dbb83c3871d9a0a5285c305f23f8d69dcee95b..d7bba1c28e0d53186f90cea5a4da4329
  };
  /**
 - * Parse schema.table() call expression
-+ * Columns of an object literal, in order. `...name` adds the columns of a top-level object
-+ * literal `name` of the module (files of a source are parsed together). `seen` is shared by the
-+ * whole expansion of a table: each literal is expanded once, which ends cycles and keeps fan-outs
-+ * linear. A second spread of the same literal would add no key, so the keys and their order are
-+ * kept; the value of a key overridden between the two spreads may differ from JS.
++ * The object literal a spread stands for, with its key in `seen`: the top-level object literal
++ * `name` for `...name`, the literal returned by the top-level function `name` for `...name()`
++ * (called without arguments). Null for anything else.
   */
 -export const parseSchemaTableCall = (callExpr) => {
 -    if (!isSchemaTableCall(callExpr) || callExpr.arguments.length < 2)
@@ -586,6 +629,27 @@ index 10dbb83c3871d9a0a5285c305f23f8d69dcee95b..d7bba1c28e0d53186f90cea5a4da4329
 -    // ref: https://github.com/liam-hq/liam/discussions/2391
 -    // Parse columns from the object expression
 -    for (const prop of columnsExpr.properties) {
++const spreadTarget = (argument, context) => {
++    if (argument.type === 'Identifier') {
++        const literal = context.objectLiterals.get(argument.value);
++        return literal ? { key: argument.value, literal } : null;
++    }
++    if (argument.type === 'CallExpression' &&
++        argument.callee.type === 'Identifier' &&
++        argument.arguments.length === 0) {
++        const literal = context.objectFunctions.get(argument.callee.value);
++        return literal ? { key: `${argument.callee.value}()`, literal } : null;
++    }
++    return null;
++};
++/**
++ * Columns of an object literal, in order. `...name` adds the columns of a top-level object
++ * literal `name` of the module, `...name()` those of the literal a top-level function `name`
++ * returns (files of a source are parsed together). `seen` is shared by the whole expansion of a
++ * table, literals and functions alike: each is expanded once, which ends cycles and keeps fan-outs
++ * linear. A second spread of the same literal would add no key, so the keys and their order are
++ * kept; the value of a key overridden between the two spreads may differ from JS.
++ */
 +const addColumns = (table, objectExpr, context, depth, seen) => {
 +    for (const prop of objectExpr.properties) {
          if (prop.type === 'KeyValueProperty') {
@@ -633,14 +697,11 @@ index 10dbb83c3871d9a0a5285c305f23f8d69dcee95b..d7bba1c28e0d53186f90cea5a4da4329
 -                        }
 -                    }
 -                }
-+        else if (prop.type === 'SpreadElement' &&
-+            prop.arguments.type === 'Identifier' &&
-+            depth < MAX_SPREAD_DEPTH &&
-+            !seen.has(prop.arguments.value)) {
-+            const spread = context.objectLiterals.get(prop.arguments.value);
-+            if (spread) {
-+                seen.add(prop.arguments.value);
-+                addColumns(table, spread, context, depth + 1, seen);
++        else if (prop.type === 'SpreadElement' && depth < MAX_SPREAD_DEPTH) {
++            const target = spreadTarget(prop.arguments, context);
++            if (target && !seen.has(target.key)) {
++                seen.add(target.key);
++                addColumns(table, target.literal, context, depth + 1, seen);
              }
          }
      }
@@ -692,7 +753,7 @@ index 10dbb83c3871d9a0a5285c305f23f8d69dcee95b..d7bba1c28e0d53186f90cea5a4da4329
              }
          }
 -        return null;
-     }
+-    }
 -    // Handle index('name').on(...) or uniqueIndex('name').on(...) with optional .using(...)
 -    let isUnique = false;
 -    let indexName = name;
@@ -706,7 +767,7 @@ index 10dbb83c3871d9a0a5285c305f23f8d69dcee95b..d7bba1c28e0d53186f90cea5a4da4329
 -        const methodName = currentExpr.callee.property.value;
 -        methodCalls.unshift({ method: methodName, expr: currentExpr });
 -        currentExpr = currentExpr.callee.object;
--    }
+     }
 -    // The base should be index() or uniqueIndex()
 -    if (currentExpr.type === 'CallExpression' &&
 -        currentExpr.callee.type === 'Identifier') {

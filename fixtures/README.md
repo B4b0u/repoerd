@@ -11,6 +11,6 @@ Synthetic repositories served by the fake GitHub mode (`GITHUB_MODE=fake`, the d
 Showcases (the demo and the README screenshots):
 
 - `acme/storefront` — Prisma 7 with `prisma.config.ts`, models in `prisma/models/`, an `inventory` Postgres schema, composite keys and a composite foreign key. Branch `feature/subscriptions` forks from `main-at-fork`; `main` moved on since.
-- `acme/helpdesk` — Drizzle with `casing: 'snake_case'`, schema files spread over a barrel and a `@/` path alias, spread columns, extra config in array form (`unique().on()`, composite `foreignKey()`, `check()`), `pgEnum` and an `audit` Postgres schema. Branch `feature/sla-escalations` forks from `main-at-fork`; `main` moved on since.
+- `acme/helpdesk` — Drizzle with `casing: 'snake_case'`, schema files spread over a barrel and a `@/` path alias, spread columns (object literals and calls of local helpers), extra config in array form (`unique().on()`, composite `foreignKey()`, `check()`), `pgEnum` and an `audit` Postgres schema. Branch `feature/sla-escalations` forks from `main-at-fork`; `main` moved on since.
 
 Never copy code from real (company) projects here: this repository is public.
