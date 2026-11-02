@@ -22,7 +22,7 @@
   "dependencies": {
     "@repoerd/model": "workspace:*",
     "@liam-hq/schema": "0.6.1",
-    "@swc/core": "1.12.11",
+    "@swc/core": "1.16.20",
     "picomatch": "^4.0.7"
   },
   "devDependencies": {
