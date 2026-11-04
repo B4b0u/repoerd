@@ -21,6 +21,10 @@ interface Props {
   diff?: SchemaDiff
   onActivate: (table: string | undefined) => void
   onBack: () => void
+  hiddenHubEdges?: ReadonlySet<string>
+  hubs?: readonly string[]
+  hubLinks?: 'none' | 'first'
+  onHubLinksChange?: (hubLinks: 'none' | 'first' | undefined) => void
 }
 
 /** A table and its direct neighbours, laid out on their own. Nothing here is saved (D12). */
@@ -34,6 +38,10 @@ export function RelatedCanvas({
   diff,
   onActivate,
   onBack,
+  hiddenHubEdges,
+  hubs,
+  hubLinks,
+  onHubLinksChange,
 }: Props) {
   const [nodes, setNodes, onNodesChange] = useNodesState<TableFlowNode>([])
   const [edges, setEdges] = useEdgesState<RelationshipFlowEdge>([])
@@ -85,6 +93,10 @@ export function RelatedCanvas({
       onActivate={onActivate}
       mode={mode}
       onModeChange={onModeChange}
+      hiddenHubEdges={hiddenHubEdges}
+      hubs={hubs}
+      hubLinks={hubLinks}
+      onHubLinksChange={onHubLinksChange}
     >
       <div className="absolute top-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-3 rounded-lg border bg-card py-1.5 pr-1.5 pl-3.5 text-sm shadow-md">
         <span>

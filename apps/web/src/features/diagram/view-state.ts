@@ -28,6 +28,12 @@ export interface ViewState {
    * `hidden`/`shown` list would pass 2,000 characters; read before `hidden` and `shown`.
    */
   compact?: string
+  /**
+   * Explicit hub tables (`?hubs=a,b`). Absent: auto-detect. Empty array (`?hubs=`): no hub.
+   */
+  hubs?: string[]
+  /** How to draw edges out of hub tables. Absent: all. */
+  hubLinks?: 'none' | 'first'
 }
 
 /** Leaving a comparison clears all its URL parameters. */
@@ -55,7 +61,19 @@ export function parseViewState(search: string): ViewState {
     // An empty `shown=` means "every table hidden"; table names are never empty.
     compact: params.get('h') || undefined,
     shown: params.has('shown') ? params.getAll('shown').filter(Boolean) : undefined,
+    hubs: parseHubs(params),
+    hubLinks: parseHubLinks(params.get('hubLinks')),
   }
+}
+
+function parseHubs(params: URLSearchParams): string[] | undefined {
+  if (!params.has('hubs')) return undefined
+  const value = params.get('hubs') ?? ''
+  return value === '' ? [] : value.split(',').filter(Boolean)
+}
+
+function parseHubLinks(value: string | null): 'none' | 'first' | undefined {
+  return value === 'none' || value === 'first' ? value : undefined
 }
 
 export function viewStatePath(owner: string, repo: string, state: Partial<ViewState>): string {
@@ -74,6 +92,8 @@ export function viewStateSearch(state: Partial<ViewState>): string {
   if (state.shown?.length === 0) query.append('shown', '')
   for (const table of state.shown ?? []) query.append('shown', table)
   if (state.compact) query.set('h', state.compact)
+  if (state.hubs !== undefined) query.set('hubs', state.hubs.join(','))
+  if (state.hubLinks) query.set('hubLinks', state.hubLinks)
   const search = query.toString()
   return search ? `?${search}` : ''
 }

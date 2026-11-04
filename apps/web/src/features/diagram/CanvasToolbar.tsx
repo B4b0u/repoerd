@@ -14,16 +14,29 @@ import {
   SelectValue,
 } from '../../shared/ui/select'
 import { Separator } from '../../shared/ui/separator'
+import { Tabs, TabsList, TabsTrigger } from '../../shared/ui/tabs'
+import type { HubLinksMode } from './hubs'
 
 interface Props {
   mode: DisplayMode
   onModeChange: (mode: DisplayMode) => void
   /** Omitted where the layout cannot be rearranged (related-tables view). */
   onRearrange?: () => void
+  /** Resolved hub tables; the selector is shown only when this is non-empty. */
+  hubs?: readonly string[]
+  hubLinks?: Exclude<HubLinksMode, 'all'>
+  onHubLinksChange?: (hubLinks: Exclude<HubLinksMode, 'all'> | undefined) => void
 }
 
 /** Floating toolbar at the bottom of the canvas (must be rendered inside <ReactFlow>). */
-export function CanvasToolbar({ mode, onModeChange, onRearrange }: Props) {
+export function CanvasToolbar({
+  mode,
+  onModeChange,
+  onRearrange,
+  hubs,
+  hubLinks,
+  onHubLinksChange,
+}: Props) {
   const { t, i18n } = useTranslation('diagram')
   const { zoomIn, zoomOut, fitView } = useReactFlow()
   const { zoom } = useViewport()
@@ -75,6 +88,32 @@ export function CanvasToolbar({ mode, onModeChange, onRearrange }: Props) {
           ))}
         </SelectContent>
       </Select>
+      {hubs && hubs.length > 0 && onHubLinksChange && (
+        <>
+          <Separator orientation="vertical" className="mx-1 data-[orientation=vertical]:h-5" />
+          <span className="px-1 text-xs font-medium text-muted-foreground">{t('hub.links')}</span>
+          <Tabs
+            value={hubLinks ?? 'all'}
+            onValueChange={(value) => {
+              if (value === 'none' || value === 'first') onHubLinksChange(value)
+              else onHubLinksChange(undefined)
+            }}
+            className="flex-row items-center gap-0"
+          >
+            <TabsList className="h-7" aria-label={t('hub.links')}>
+              <TabsTrigger value="none" className="px-1.5 text-xs">
+                {t('hub.none')}
+              </TabsTrigger>
+              <TabsTrigger value="first" className="px-1.5 text-xs" title={t('hub.firstHint')}>
+                {t('hub.first')}
+              </TabsTrigger>
+              <TabsTrigger value="all" className="px-1.5 text-xs">
+                {t('hub.all')}
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </>
+      )}
     </Panel>
   )
 }

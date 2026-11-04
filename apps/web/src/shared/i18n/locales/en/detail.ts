@@ -23,4 +23,5 @@ export const detail = {
   default: 'Default',
   noIndex: 'No index.',
   noConstraint: 'No constraint.',
+  treatAsHub: 'Treat as hub table',
 }

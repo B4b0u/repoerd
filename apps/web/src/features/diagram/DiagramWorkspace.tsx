@@ -1,4 +1,10 @@
-import type { DbSchema, DisplayMode, RepoRef, SchemaDiff } from '@repoerd/model'
+import {
+  type DbSchema,
+  type DisplayMode,
+  type RepoRef,
+  relationshipStatus,
+  type SchemaDiff,
+} from '@repoerd/model'
 import { ReactFlowProvider, useReactFlow } from '@xyflow/react'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -7,6 +13,7 @@ import { ChangesPanel } from '../compare/ChangesPanel'
 import { TableDetailPanel } from '../table-detail/TableDetailPanel'
 import { TableListPane } from '../table-list/TableListPane'
 import { DiagramCanvas } from './DiagramCanvas'
+import { hiddenHubRelationships, hubViewSchema, resolveHubs } from './hubs'
 import { relatedTableNames } from './layout/related'
 import { canvasHiddenTables, changedTables } from './model/diff-view'
 import { defaultDisplayMode } from './model/display-mode'
@@ -77,6 +84,43 @@ function Workspace({
     () => canvasHiddenTables(tables.hidden, diff, changedOnly),
     [tables.hidden, diff, changedOnly],
   )
+  const hubsKey = viewState.hubs === undefined ? undefined : viewState.hubs.join('\n')
+  const hubsSchema = useMemo(
+    () =>
+      diff
+        ? hubViewSchema(
+            schema,
+            (name) => diff.tables[name]?.status === 'removed',
+            (relationship) => relationshipStatus(diff, relationship) === 'removed',
+          )
+        : schema,
+    [schema, diff],
+  )
+  const hubs = useMemo(
+    () =>
+      resolveHubs(
+        hubsSchema,
+        hubsKey === undefined ? undefined : hubsKey ? hubsKey.split('\n') : [],
+      ),
+    [hubsSchema, hubsKey],
+  )
+  const hiddenHubEdges = useMemo(
+    () =>
+      hiddenHubRelationships(hubsSchema, hubs, viewState.hubLinks ?? 'all', (relationship) =>
+        diff ? relationshipStatus(diff, relationship) !== 'unchanged' : false,
+      ),
+    [hubsSchema, hubs, viewState.hubLinks, diff],
+  )
+  const changeHubLinks = (hubLinks: 'none' | 'first' | undefined) =>
+    updateView({ hubLinks }, { replace: true })
+  const toggleHub = (table: string, on: boolean) => {
+    const next = on
+      ? hubs.includes(table)
+        ? hubs
+        : [...hubs, table]
+      : hubs.filter((name) => name !== table)
+    updateView({ hubs: next }, { replace: true })
+  }
 
   const changeMode = (next: DisplayMode) => updateView({ mode: next }, { replace: true })
   const activate = (table: string | undefined) => updateView({ active: table })
@@ -164,6 +208,10 @@ function Workspace({
             diff={diff}
             onActivate={activate}
             onBack={backToFullSchema}
+            hiddenHubEdges={hiddenHubEdges}
+            hubs={hubs}
+            hubLinks={viewState.hubLinks}
+            onHubLinksChange={changeHubLinks}
           />
         ) : (
           <DiagramCanvas
@@ -180,6 +228,10 @@ function Workspace({
             onActivate={activate}
             centerOn={centerAfterRemount}
             onCentered={() => setCenterAfterRemount(undefined)}
+            hiddenHubEdges={hiddenHubEdges}
+            hubs={hubs}
+            hubLinks={viewState.hubLinks}
+            onHubLinksChange={changeHubLinks}
           />
         )}
       </div>
@@ -189,6 +241,8 @@ function Workspace({
           tableName={tables.active}
           onClose={() => activate(undefined)}
           diff={diff?.tables[tables.active]}
+          isHub={hubs.includes(tables.active)}
+          onHubChange={(on) => toggleHub(tables.active as string, on)}
         >
           <RelatedTablesPreview
             schema={schema}

@@ -50,6 +50,10 @@ interface Props {
   /** Table to centre once placed: the canvas mounts back from the related-tables view. */
   centerOn?: string
   onCentered?: () => void
+  hiddenHubEdges?: ReadonlySet<string>
+  hubs?: readonly string[]
+  hubLinks?: 'none' | 'first'
+  onHubLinksChange?: (hubLinks: 'none' | 'first' | undefined) => void
 }
 
 const LAYOUT_TOAST_ID = 'layout-save-failed'
@@ -92,6 +96,10 @@ export function DiagramCanvas({
   onActivate,
   centerOn,
   onCentered,
+  hiddenHubEdges,
+  hubs,
+  hubLinks,
+  onHubLinksChange,
 }: Props) {
   const layout = useLayout(repo, sourceId, mode, inheritLayout)
   const [nodes, setNodes, onNodesChange] = useNodesState<TableFlowNode>([])
@@ -271,6 +279,10 @@ export function DiagramCanvas({
         mode={mode}
         onModeChange={onModeChange}
         onRearrange={() => setConfirmingRearrange(true)}
+        hiddenHubEdges={hiddenHubEdges}
+        hubs={hubs}
+        hubLinks={hubLinks}
+        onHubLinksChange={onHubLinksChange}
       />
       <AlertDialog open={confirmingRearrange} onOpenChange={setConfirmingRearrange}>
         <AlertDialogContent>

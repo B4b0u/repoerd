@@ -12,7 +12,8 @@ RepoERD is a self-hosted web app that shows the database schema of your GitHub r
 - **Table details**: columns (type, primary and foreign keys, nullability, defaults, comments), indexes, constraints with `ON DELETE` / `ON UPDATE`, and a "related tables" view that lays out a table with its direct neighbours.
 - **Branch comparison**: what a branch changes in the schema — tables, columns, indexes, constraints, relationships and enums added, removed or modified, with every value before → after — from its fork point like a pull request, or directly between two branches. A list of changes, and a link to share.
 - **PostgreSQL schemas and keys**: tables outside `public` (Prisma `@@schema`, Drizzle `pgSchema`) are named `schema.table`; composite primary and foreign keys are drawn as such; views are counted, not drawn.
-- **Shareable links**: the branch, source, comparison, selected table, hidden tables and display mode are in the URL.
+- **Hub tables**: a table referenced by more than 30% of the schema is detected as a hub (typical: `organizations` in a multi-tenant schema). Its links can be drawn all, first-order only, or hidden, and the choice lives in the URL so it is shareable.
+- **Shareable links**: the branch, source, comparison, selected table, hidden tables, display mode, hub tables and hub-link mode are in the URL.
 - **Access follows GitHub**: people see only the repositories they can reach through the GitHub App, and changing the sources of a repository needs push access. Sign-in can be restricted to some organisations; administrators manage the instance from `/admin`.
 - English and French, light and dark themes, a keyboard-friendly table list.
 

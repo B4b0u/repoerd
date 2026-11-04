@@ -77,6 +77,14 @@ export const diagram: Catalog['diagram'] = {
     displayMode: "Mode d'affichage",
     placing: 'Placement des tables…',
   },
+  hub: {
+    links: 'Liens des tables pivots',
+    none: 'Aucun',
+    first: 'Premier ordre',
+    all: 'Tous',
+    firstHint: 'Masquer les liens des tables déjà atteignables par une autre table',
+    badge: '→ {{table}}',
+  },
   displayModes: {
     ALL_FIELDS: 'Tous les champs',
     KEYS_ONLY: 'Clés uniquement',

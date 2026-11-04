@@ -103,7 +103,7 @@
   box-sizing: border-box;
   position: relative;
   display: grid;
-  grid-template-columns: 16px minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
   padding: 0 12px;
@@ -113,6 +113,19 @@
 
 .table-node__column:last-child {
   border-bottom: none;
+}
+
+.table-node__marks {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.table-node__hub-badge {
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--link);
 }
 
 .column-icon {

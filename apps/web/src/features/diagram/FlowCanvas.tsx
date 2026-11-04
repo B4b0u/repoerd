@@ -13,6 +13,7 @@ import { useThemeContext } from '../../shared/theme/theme-context'
 import { CanvasToolbar } from './CanvasToolbar'
 import { useFlowAriaLabels } from './flow-aria'
 import { edgeTypes, nodeTypes } from './flow-types'
+import type { HubLinksMode } from './hubs'
 import { minimapColor } from './model/diff-view'
 import { createHighlighter } from './model/highlight'
 import type { RelationshipFlowEdge, TableFlowNode } from './model/to-flow'
@@ -30,6 +31,10 @@ interface Props {
   mode: DisplayMode
   onModeChange: (mode: DisplayMode) => void
   onRearrange?: () => void
+  hiddenHubEdges?: ReadonlySet<string>
+  hubs?: readonly string[]
+  hubLinks?: Exclude<HubLinksMode, 'all'>
+  onHubLinksChange?: (hubLinks: Exclude<HubLinksMode, 'all'> | undefined) => void
   /** Overlays rendered above the canvas (banners, warnings). */
   children?: ReactNode
 }
@@ -45,6 +50,10 @@ export function FlowCanvas({
   mode,
   onModeChange,
   onRearrange,
+  hiddenHubEdges,
+  hubs,
+  hubLinks,
+  onHubLinksChange,
   children,
 }: Props) {
   const { theme } = useThemeContext()
@@ -52,8 +61,8 @@ export function FlowCanvas({
   const [hovered, setHovered] = useState<string | undefined>()
   const [highlight] = useState(createHighlighter)
   const display = useMemo(
-    () => highlight(nodes, edges, { active, hovered, hidden }),
-    [highlight, nodes, edges, active, hovered, hidden],
+    () => highlight(nodes, edges, { active, hovered, hidden, hiddenHubEdges }),
+    [highlight, nodes, edges, active, hovered, hidden, hiddenHubEdges],
   )
 
   return (
@@ -92,7 +101,14 @@ export function FlowCanvas({
           nodeBorderRadius={4}
           nodeColor={(node) => minimapColor(node.data.diff?.status)}
         />
-        <CanvasToolbar mode={mode} onModeChange={onModeChange} onRearrange={onRearrange} />
+        <CanvasToolbar
+          mode={mode}
+          onModeChange={onModeChange}
+          onRearrange={onRearrange}
+          hubs={hubs}
+          hubLinks={hubLinks}
+          onHubLinksChange={onHubLinksChange}
+        />
       </ReactFlow>
     </div>
   )

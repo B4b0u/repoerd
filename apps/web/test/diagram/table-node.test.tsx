@@ -50,6 +50,31 @@ describe('TableNode overview name', () => {
     const root = container.querySelector<HTMLElement>('.table-node')
     expect(root?.style.getPropertyValue('--name-length')).toBe(String('order_items'.length))
   })
+
+  it('shows a hub badge on the referencing column with a native tooltip', () => {
+    const props = {
+      id: 'order_items',
+      data: {
+        table,
+        columns: table.columns,
+        foreignKeyColumns: ['sku'],
+        mode: 'ALL_FIELDS',
+        highlight: 'none',
+        hubBadges: { sku: 'organizations' },
+      },
+    } as unknown as Parameters<typeof TableNode>[0]
+    const { container } = render(
+      <ReactFlowProvider>
+        <TableNode {...props} />
+      </ReactFlowProvider>,
+    )
+    const rows = [...container.querySelectorAll('.table-node__column')]
+    expect(rows[0]?.querySelector('.table-node__hub-badge')).toBeNull()
+    const badge = rows[1]?.querySelector('.table-node__hub-badge')
+    expect(badge?.textContent).toBe('→')
+    expect(badge?.getAttribute('title')).toBe('→ organizations')
+    expect(badge?.getAttribute('aria-label')).toBe('→ organizations')
+  })
 })
 
 describe('TableNode in a comparison', () => {

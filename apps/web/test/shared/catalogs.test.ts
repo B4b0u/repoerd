@@ -25,6 +25,7 @@ const SAME_IN_BOTH = new Set([
   'common.formats.prisma',
   'common.formats.drizzle',
   'diagram.toolbar.sources',
+  'diagram.hub.badge',
   'setup.steps.register-app',
   'setup.registerApp.app',
   'setup.registerApp.clientId',
