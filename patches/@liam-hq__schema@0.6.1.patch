@@ -31,15 +31,143 @@ index f62f97a60b1430657c4f7fd65027fb78d310c529..db24d4a695a66a019037d98af6a0c701
   * Check if a call expression is a schema.table() call
   */
 diff --git a/dist/parser/drizzle/postgres/columnParser.js b/dist/parser/drizzle/postgres/columnParser.js
-index 7e9787da9c91b23ee124ab9f19d2d1442a929bae..6e0b2d5a531a2a72c8ddd91aa05858536d9744f0 100644
+index 7e9787da9c91b23ee124ab9f19d2d1442a929bae..c3bff6c17f3dd28126028433880debbea2e6c37a 100644
 --- a/dist/parser/drizzle/postgres/columnParser.js
 +++ b/dist/parser/drizzle/postgres/columnParser.js
-@@ -1,3 +1,4 @@
-+// Modified by RepoERD: columns say whether their name was explicit (casing); options may be the first argument when the name is omitted.
+@@ -1,12 +1,108 @@
++// Modified by RepoERD: columns say whether their name was explicit (casing); options may be the first argument when the name is omitted; named and inline customType dataType literals (call options do not alter a resolved literal; colliding names stay identifiers).
  /**
   * Column definition parsing for Drizzle ORM schema parsing
   */
-@@ -32,26 +33,34 @@ export const parseColumnFromProperty = (prop) => {
+ import { getArgumentExpression, getIdentifierName, getStringValue, isObjectExpression, isStringLiteral, parseMethodChain, } from './astUtils.js';
+ import { parseDefaultValue, parseObjectExpression } from './expressionParser.js';
++const EMPTY_CUSTOM_TYPES = new Map();
++/**
++ * `x as const`, `(x)`: the expression inside (same cases as tableParser.unwrapExpression).
++ */
++const unwrapExpression = (expr) => {
++    let current = expr;
++    while (current &&
++        (current.type === 'ParenthesisExpression' ||
++            current.type === 'TsAsExpression' ||
++            current.type === 'TsConstAssertion' ||
++            current.type === 'TsSatisfiesExpression')) {
++        current = current.expression;
++    }
++    return current ?? null;
++};
++const propertyName = (prop) => {
++    const key = prop.key;
++    if (!key)
++        return null;
++    if (key.type === 'Identifier')
++        return key.value;
++    if (key.type === 'StringLiteral')
++        return key.value;
++    return null;
++};
++const stringLiteralValue = (expr) => {
++    const value = unwrapExpression(expr);
++    if (!value)
++        return null;
++    if (value.type === 'StringLiteral')
++        return value.value;
++    if (value.type === 'TemplateLiteral' &&
++        Array.isArray(value.expressions) &&
++        value.expressions.length === 0) {
++        const quasi = value.quasis?.[0];
++        const text = quasi?.cooked ?? quasi?.raw;
++        return typeof text === 'string' ? text : null;
++    }
++    return null;
++};
++const blockLiteralReturn = (body) => {
++    if (!body ||
++        body.type !== 'BlockStatement' ||
++        !Array.isArray(body.stmts) ||
++        body.stmts.length !== 1)
++        return null;
++    const statement = body.stmts[0];
++    if (statement.type !== 'ReturnStatement' || !statement.argument)
++        return null;
++    return stringLiteralValue(statement.argument);
++};
++const dataTypeLiteral = (fn) => {
++    if (!fn)
++        return null;
++    if (fn.type === 'ArrowFunctionExpression') {
++        return fn.body.type === 'BlockStatement'
++            ? blockLiteralReturn(fn.body)
++            : stringLiteralValue(fn.body);
++    }
++    if (fn.type === 'FunctionExpression' || fn.type === 'MethodProperty') {
++        return blockLiteralReturn(fn.body);
++    }
++    return null;
++};
++/**
++ * SQL type returned by `customType({ dataType() { return 'real' } })` when that return is a
++ * string literal (or a template with no substitutions). Null when the call is not a resolvable
++ * `customType(...)`.
++ */
++export const customDataType = (callExpr) => {
++    if (!callExpr || callExpr.type !== 'CallExpression')
++        return null;
++    const callee = unwrapExpression(callExpr.callee);
++    if (!callee || callee.type !== 'Identifier' || callee.value !== 'customType')
++        return null;
++    const config = unwrapExpression(getArgumentExpression(callExpr.arguments[0]));
++    if (!config || !isObjectExpression(config))
++        return null;
++    for (const prop of config.properties) {
++        if (propertyName(prop) !== 'dataType')
++            continue;
++        if (prop.type === 'MethodProperty')
++            return dataTypeLiteral(prop);
++        if (prop.type === 'KeyValueProperty')
++            return dataTypeLiteral(unwrapExpression(prop.value));
++        return null;
++    }
++    return null;
++};
++const isCustomTypeCall = (callExpr) => {
++    if (!callExpr || callExpr.type !== 'CallExpression')
++        return false;
++    const callee = unwrapExpression(callExpr.callee);
++    return Boolean(callee && callee.type === 'Identifier' && callee.value === 'customType');
++};
+ /**
+  * Parse column definition from object property
+  */
+-export const parseColumnFromProperty = (prop) => {
++export const parseColumnFromProperty = (prop, context = { customTypes: EMPTY_CUSTOM_TYPES }) => {
+     if (prop.type !== 'KeyValueProperty')
+         return null;
+     const columnName = prop.key.type === 'Identifier' ? getIdentifierName(prop.key) : null;
+@@ -24,34 +120,56 @@ export const parseColumnFromProperty = (prop) => {
+         current.callee.type === 'MemberExpression') {
+         current = current.callee.object;
+     }
++    let fromDataTypeLiteral = false;
+     if (current.type === 'CallExpression' &&
+         current.callee.type === 'Identifier') {
+-        baseType = current.callee.value;
++        const resolved = context.customTypes?.get(current.callee.value);
++        if (resolved !== undefined) {
++            baseType = resolved;
++            fromDataTypeLiteral = true;
++        }
++        else {
++            baseType = current.callee.value;
++        }
++    }
++    else if (current.type === 'CallExpression' && isCustomTypeCall(current.callee)) {
++        // `customType({ dataType() { return 'citext' } })('email')`
++        const resolved = customDataType(current.callee);
++        fromDataTypeLiteral = resolved != null;
++        baseType = resolved ?? 'customType';
+     }
+     if (!baseType)
          return null;
      // Extract the actual column name from the first argument of the base type call
      let actualColumnName = columnName; // Default to JS property name
@@ -72,8 +200,8 @@ index 7e9787da9c91b23ee124ab9f19d2d1442a929bae..6e0b2d5a531a2a72c8ddd91aa0585853
 -        const secondArgExpr = getArgumentExpression(secondArg);
 -        if (secondArgExpr && isObjectExpression(secondArgExpr)) {
 -            column.typeOptions = parseObjectExpression(secondArgExpr);
-+    // Parse type options (like { length: 255 })
-+    if (optionsArg) {
++    // Parse type options (like { length: 255 }). A resolved dataType literal is kept verbatim.
++    if (optionsArg && !fromDataTypeLiteral) {
 +        const optionsExpr = getArgumentExpression(optionsArg);
 +        if (optionsExpr && isObjectExpression(optionsExpr)) {
 +            column.typeOptions = parseObjectExpression(optionsExpr);
@@ -174,11 +302,11 @@ index 5eb14b1d0e454d40677ff11ad93750a58f5cca6a..8e3c7944383a66ed08bbe9db4c3782ae
          catch (error) {
              errors.push(new Error(`Error parsing table ${tableName}: ${error instanceof Error ? error.message : String(error)}`));
 diff --git a/dist/parser/drizzle/postgres/mainParser.js b/dist/parser/drizzle/postgres/mainParser.js
-index 1c79a49e2e1aa8053a0836982ca1f06de6b9f1ec..596eccea26540a007e93cbf05f00070ad5ff7e7d 100644
+index 1c79a49e2e1aa8053a0836982ca1f06de6b9f1ec..424b827bb512504e3d8e5f4b9e68c89427d8b385 100644
 --- a/dist/parser/drizzle/postgres/mainParser.js
 +++ b/dist/parser/drizzle/postgres/mainParser.js
-@@ -1,11 +1,12 @@
-+// Modified by RepoERD: tables keyed `schema.table` outside `public` (pgSchema), chained schema tables, spread columns, views counted and skipped.
+@@ -1,11 +1,13 @@
++// Modified by RepoERD: tables keyed `schema.table` outside `public` (pgSchema), chained schema tables, spread columns, views counted and skipped, customType dataType literals (dropped on pg-core import collision or disagreeing declarations).
  /**
   * Main orchestrator for Drizzle ORM schema parsing
   */
@@ -188,11 +316,12 @@ index 1c79a49e2e1aa8053a0836982ca1f06de6b9f1ec..596eccea26540a007e93cbf05f00070a
  import { convertDrizzleEnumsToInternal, convertDrizzleTablesToInternal, } from './converter.js';
  import { parsePgEnumCall } from './enumParser.js';
 -import { parsePgTableCall, parsePgTableWithComment, parseSchemaTableCall, } from './tableParser.js';
++import { customDataType } from './columnParser.js';
 +import { parsePgTableCall, parsePgTableWithComment, parseSchemaTableCall, qualifiedTableName, unwrapExpression, } from './tableParser.js';
  /**
   * Parse Drizzle TypeScript schema to extract table definitions using SWC AST
   */
-@@ -18,27 +19,56 @@ const parseDrizzleSchema = (sourceCode) => {
+@@ -18,27 +20,90 @@ const parseDrizzleSchema = (sourceCode) => {
      const tables = {};
      const enums = {};
      const variableToTableMapping = {};
@@ -206,13 +335,7 @@ index 1c79a49e2e1aa8053a0836982ca1f06de6b9f1ec..596eccea26540a007e93cbf05f00070a
  /**
 - * Visit and traverse the module AST
 + * The top-level variable declarators of the module.
-  */
--const visitModule = (module, tables, enums, variableToTableMapping) => {
--    for (const item of module.body) {
--        if (item.type === 'VariableDeclaration') {
--            for (const declarator of item.declarations) {
--                visitVariableDeclarator(declarator, tables, enums, variableToTableMapping);
--            }
++ */
 +const topLevelDeclarators = (module) => module.body.flatMap((item) => {
 +    if (item.type === 'VariableDeclaration')
 +        return item.declarations;
@@ -222,12 +345,33 @@ index 1c79a49e2e1aa8053a0836982ca1f06de6b9f1ec..596eccea26540a007e93cbf05f00070a
 +    return [];
 +});
 +/**
-+ * What table definitions may refer to: `pgSchema('x')` variables and top-level object literals
-+ * (spread columns). Collected first, so the order of the files does not matter.
-+ */
++ * What table definitions may refer to: `pgSchema('x')` variables, top-level object literals
++ * (spread columns) and `customType` dataType literals. Collected first, so the order of the
++ * files does not matter. A name imported from `drizzle-orm/pg-core`, or declared as a
++ * `customType` more than once with different literals, is dropped (type stays the identifier).
+  */
+-const visitModule = (module, tables, enums, variableToTableMapping) => {
++const pgCoreImportLocals = (module) => {
++    const names = [];
+     for (const item of module.body) {
+-        if (item.type === 'VariableDeclaration') {
+-            for (const declarator of item.declarations) {
+-                visitVariableDeclarator(declarator, tables, enums, variableToTableMapping);
++        if (item.type !== 'ImportDeclaration' || item.source?.value !== 'drizzle-orm/pg-core')
++            continue;
++        for (const specifier of item.specifiers ?? []) {
++            const local = specifier.local?.value;
++            if (typeof local === 'string')
++                names.push(local);
++        }
++    }
++    return names;
++};
 +const collectModuleContext = (module) => {
 +    const schemaVariables = new Map();
 +    const objectLiterals = new Map();
++    const customTypes = new Map();
++    const ambiguousCustomTypes = new Set();
 +    for (const declarator of topLevelDeclarators(module)) {
 +        if (declarator.id.type !== 'Identifier' || !declarator.init)
 +            continue;
@@ -236,11 +380,7 @@ index 1c79a49e2e1aa8053a0836982ca1f06de6b9f1ec..596eccea26540a007e93cbf05f00070a
 +            continue;
 +        if (init.type === 'ObjectExpression') {
 +            objectLiterals.set(declarator.id.value, init);
-         }
--        else if (item.type === 'ExportDeclaration' &&
--            item.declaration?.type === 'VariableDeclaration') {
--            for (const declarator of item.declaration.declarations) {
--                visitVariableDeclarator(declarator, tables, enums, variableToTableMapping);
++        }
 +        else if (init.type === 'CallExpression' &&
 +            init.callee.type === 'Identifier' &&
 +            init.callee.value === 'pgSchema') {
@@ -249,8 +389,29 @@ index 1c79a49e2e1aa8053a0836982ca1f06de6b9f1ec..596eccea26540a007e93cbf05f00070a
 +                schemaVariables.set(declarator.id.value, nameArg.value);
              }
          }
+-        else if (item.type === 'ExportDeclaration' &&
+-            item.declaration?.type === 'VariableDeclaration') {
+-            for (const declarator of item.declaration.declarations) {
+-                visitVariableDeclarator(declarator, tables, enums, variableToTableMapping);
++        else if (init.type === 'CallExpression') {
++            const sqlType = customDataType(init);
++            if (sqlType) {
++                const name = declarator.id.value;
++                if (ambiguousCustomTypes.has(name))
++                    continue;
++                const existing = customTypes.get(name);
++                if (existing === undefined)
++                    customTypes.set(name, sqlType);
++                else if (existing !== sqlType) {
++                    customTypes.delete(name);
++                    ambiguousCustomTypes.add(name);
++                }
+             }
+         }
      }
-+    return { schemaVariables, objectLiterals, ignoredViews: 0 };
++    for (const name of pgCoreImportLocals(module))
++        customTypes.delete(name);
++    return { schemaVariables, objectLiterals, customTypes, ignoredViews: 0 };
 +};
 +/**
 + * Visit and traverse the module AST
@@ -262,7 +423,7 @@ index 1c79a49e2e1aa8053a0836982ca1f06de6b9f1ec..596eccea26540a007e93cbf05f00070a
  };
  /**
   * Check if the call expression is a comment call
-@@ -55,26 +85,37 @@ const isCommentCall = (callExpr) => {
+@@ -55,26 +120,37 @@ const isCommentCall = (callExpr) => {
  const isPgEnumCall = (callExpr) => {
      return (callExpr.callee.type === 'Identifier' && callExpr.callee.value === 'pgEnum');
  };
@@ -315,7 +476,7 @@ index 1c79a49e2e1aa8053a0836982ca1f06de6b9f1ec..596eccea26540a007e93cbf05f00070a
      }
  };
  /**
-@@ -89,38 +130,37 @@ const handlePgEnumCall = (declarator, callExpr, enums) => {
+@@ -89,38 +165,37 @@ const handlePgEnumCall = (declarator, callExpr, enums) => {
      }
  };
  /**
@@ -370,7 +531,7 @@ index 1c79a49e2e1aa8053a0836982ca1f06de6b9f1ec..596eccea26540a007e93cbf05f00070a
      }
  };
  /**
-@@ -128,17 +168,17 @@ const visitVariableDeclarator = (declarator, tables, enums, variableToTableMappi
+@@ -128,17 +203,17 @@ const visitVariableDeclarator = (declarator, tables, enums, variableToTableMappi
   */
  const parseDrizzleSchemaString = (schemaString) => {
      try {
@@ -392,11 +553,11 @@ index 1c79a49e2e1aa8053a0836982ca1f06de6b9f1ec..596eccea26540a007e93cbf05f00070a
                  new Error(`Error parsing Drizzle schema: ${error instanceof Error ? error.message : String(error)}`),
              ],
 diff --git a/dist/parser/drizzle/postgres/tableParser.js b/dist/parser/drizzle/postgres/tableParser.js
-index 10dbb83c3871d9a0a5285c305f23f8d69dcee95b..d7bba1c28e0d53186f90cea5a4da4329eee2e343 100644
+index 10dbb83c3871d9a0a5285c305f23f8d69dcee95b..25f9416cfde93c52f6a1c64adba24323e053d992 100644
 --- a/dist/parser/drizzle/postgres/tableParser.js
 +++ b/dist/parser/drizzle/postgres/tableParser.js
 @@ -1,14 +1,51 @@
-+// Modified by RepoERD: extra config in array form, unique()/foreignKey()/check() entries, spread columns, Postgres schema of `<schema>.table()`.
++// Modified by RepoERD: extra config in array form, unique()/foreignKey()/check() entries, spread columns, Postgres schema of `<schema>.table()`, customTypes passed to columns (pg-core imports and disagreeing literals already dropped).
  /**
   * Table structure parsing for Drizzle ORM schema parsing
   */
@@ -408,7 +569,7 @@ index 10dbb83c3871d9a0a5285c305f23f8d69dcee95b..d7bba1c28e0d53186f90cea5a4da4329
 +/** Spreads of spreads are followed this deep at most. */
 +const MAX_SPREAD_DEPTH = 8;
 +/** What a table definition may refer to elsewhere in the module (see mainParser.js). */
-+const EMPTY_CONTEXT = { schemaVariables: new Map(), objectLiterals: new Map() };
++const EMPTY_CONTEXT = { schemaVariables: new Map(), objectLiterals: new Map(), customTypes: new Map() };
 +/**
 + * The key of a table: `schema.table` outside the default `public` schema, the bare name inside.
 + */
@@ -589,13 +750,14 @@ index 10dbb83c3871d9a0a5285c305f23f8d69dcee95b..d7bba1c28e0d53186f90cea5a4da4329
 +const addColumns = (table, objectExpr, context, depth, seen) => {
 +    for (const prop of objectExpr.properties) {
          if (prop.type === 'KeyValueProperty') {
-             const column = parseColumnFromProperty(prop);
+-            const column = parseColumnFromProperty(prop);
 -            if (column) {
 -                // Use the JS property name as the key
 -                const jsPropertyName = prop.key.type === 'Identifier' ? getIdentifierName(prop.key) : null;
 -                if (jsPropertyName) {
 -                    table.columns[jsPropertyName] = column;
 -                }
++            const column = parseColumnFromProperty(prop, context);
 +            // Use the JS property name as the key
 +            const jsPropertyName = prop.key.type === 'Identifier' ? getIdentifierName(prop.key) : null;
 +            if (column && jsPropertyName) {

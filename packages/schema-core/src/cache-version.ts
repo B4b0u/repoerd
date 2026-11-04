@@ -4,5 +4,6 @@
  * deletes cached results of another version at start-up and never serves them.
  * 2: plan 6c (patched Liam, `schema.table` names, casing, views, new problems).
  * 3: plan 6e (a one-to-many Prisma self-relation is no longer read as a many-to-many table).
+ * 4: Drizzle `customType` columns use the `dataType` literal when it is a string.
  */
-export const CACHE_VERSION = 3
+export const CACHE_VERSION = 4
