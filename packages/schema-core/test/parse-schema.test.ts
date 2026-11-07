@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createParserPool, type ParserPool } from '../src/isolate/parser-pool.js'
-import { parseSchema } from '../src/parse/parse-schema.js'
+import { fileAtLine, parseSchema } from '../src/parse/parse-schema.js'
 
 /** The real parser child, which also dies on "__crash__" and hangs on "__hang__". */
 const TEST_CHILD = new URL('./helpers/test-child.ts', import.meta.url)
@@ -140,6 +140,61 @@ describe('parseSchema', () => {
         cardinality: 'ONE_TO_MANY',
       },
     ])
+  })
+
+  it('gives each Drizzle table the file declaring it', async () => {
+    const result = await parseSchema(
+      [
+        {
+          path: 'src/db/schema/users.ts',
+          content:
+            "import { pgTable, uuid } from 'drizzle-orm/pg-core'\nexport const users = pgTable('users', { id: uuid('id').primaryKey() })",
+        },
+        {
+          path: 'src/db/schema/billing.ts',
+          content:
+            "import { pgTable, uuid } from 'drizzle-orm/pg-core'\r\nimport { users } from './users'\r\nexport const invoices = pgTable('invoices', { id: uuid('id').primaryKey(), userId: uuid('user_id').references(() => users.id) })\r\n",
+        },
+      ],
+      'drizzle',
+    )
+    if (!result.ok) throw new Error(JSON.stringify(result.failure))
+    expect(result.schema.tables.users?.file).toBe('src/db/schema/users.ts')
+    expect(result.schema.tables.invoices?.file).toBe('src/db/schema/billing.ts')
+  })
+
+  it('gives each Prisma model the file declaring it', async () => {
+    const result = await parseSchema(
+      [
+        {
+          path: 'prisma/schema.prisma',
+          content:
+            'datasource db {\n  provider = "postgresql"\n  url      = env("DATABASE_URL")\n}\n\nmodel User {\n  id Int @id\n  @@map("users")\n}\n',
+        },
+        {
+          path: 'prisma/models/billing.prisma',
+          content: 'model Invoice {\r\n  id Int @id\r\n  @@map("invoices")\r\n}\r\n',
+        },
+      ],
+      'prisma',
+    )
+    if (!result.ok) throw new Error(JSON.stringify(result.failure))
+    expect(result.schema.tables.users?.file).toBe('prisma/schema.prisma')
+    expect(result.schema.tables.invoices?.file).toBe('prisma/models/billing.prisma')
+  })
+
+  it('maps a line to the file of the joined text, and to nothing past the end', () => {
+    const files = [
+      { path: 'a.ts', content: 'x\r\ny' },
+      { path: 'b.ts', content: 'z\n' },
+    ]
+    expect([0, 1, 2, 3].map((line) => fileAtLine(files, line))).toEqual([
+      'a.ts',
+      'a.ts',
+      'b.ts',
+      'b.ts',
+    ])
+    expect(fileAtLine(files, 4)).toBeUndefined()
   })
 
   it('parses Drizzle schemas split across files, using database column names', async () => {

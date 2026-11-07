@@ -6,5 +6,6 @@
  * 3: plan 6e (a one-to-many Prisma self-relation is no longer read as a many-to-many table).
  * 4: Drizzle spread columns returned by a top-level function without parameters (`...f()`).
  * 5: Drizzle `customType` columns use the `dataType` literal when it is a string.
+ * 6: tables carry the file that declares them.
  */
-export const CACHE_VERSION = 5
+export const CACHE_VERSION = 6

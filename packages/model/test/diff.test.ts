@@ -81,6 +81,13 @@ describe('mergeOrder', () => {
 })
 
 describe('diffSchemas', () => {
+  it('ignores the file declaring a table', () => {
+    const moved = table('users', users.columns, { file: 'src/other.ts' })
+    const diff = diffSchemas(schema([users]), schema([moved]))
+    expect(diff.hasChanges).toBe(false)
+    expect(diff.tables.users?.status).toBe('unchanged')
+  })
+
   it('finds nothing between equal schemas', () => {
     const diff = diffSchemas(schema([users]), schema([users]))
     expect(diff.hasChanges).toBe(false)
