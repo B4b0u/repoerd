@@ -48,6 +48,6 @@ export async function parseWithLiam(input: string, format: SchemaFormat): Promis
     errors: result.errors.map((error) =>
       restoreLineNumbers(stripAnsi(error.message), prepared.injectedLines),
     ),
-    declarationLines: {},
+    declarationLines: prepared.tableLines,
   }
 }

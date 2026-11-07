@@ -44,3 +44,12 @@ export const invoices = billing.table('invoices', { id: uuid('id').primaryKey() 
     expect(leadingTriviaBytes('\uFEFF// é\n  /* x */\nconst a = 1')).toBe(3 + 6 + 10)
   })
 })
+
+describe('Prisma declaration lines', () => {
+  it('keeps the input line of a model after a url-less datasource, without views', async () => {
+    const input = 'datasource db {\n  provider = "postgresql"\n}\n\nmodel A {\n  id Int @id\n}\n'
+    expect((await parseWithLiam(input, 'prisma')).declarationLines).toEqual({ A: 4 })
+    const withView = `${input}\nview V {\n  id Int @id\n}\n`
+    expect((await parseWithLiam(withView, 'prisma')).declarationLines).toEqual({ A: 4 })
+  })
+})

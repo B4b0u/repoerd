@@ -108,3 +108,11 @@ describe('preparePrismaSchema', () => {
     )
   })
 })
+
+describe('preparePrismaSchema tableLines', () => {
+  it('maps each model to the line of its header, by its table name', () => {
+    const input =
+      'model User {\n  id Int @id\n  @@map("users")\n}\n\nmodel Invoice {\n  id Int @id\n  @@schema("billing")\n}\n\nview Stats {\n  n Int\n}\n'
+    expect(preparePrismaSchema(input).tableLines).toEqual({ users: 0, 'billing.Invoice': 5 })
+  })
+})
