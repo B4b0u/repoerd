@@ -81,6 +81,9 @@ export function buildFlow(
         height: size.height,
         // React Flow's English "node" role description: the card's own text names it.
         domAttributes: { 'aria-roledescription': undefined },
+        // A Shift press on a card never starts React Flow's selection box (only the empty canvas
+        // does), so a Shift+click that moves a little still adds or removes the card.
+        className: 'nokey',
         data: {
           table,
           columns: visibleColumns(table, mode),

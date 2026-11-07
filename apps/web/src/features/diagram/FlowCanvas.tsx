@@ -9,6 +9,7 @@ import {
   ReactFlow,
   useKeyPress,
   useStore,
+  useStoreApi,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
@@ -18,7 +19,7 @@ import { useFlowAriaLabels } from './flow-aria'
 import { edgeTypes, nodeTypes } from './flow-types'
 import { GroupFrames, useGroupDisplay } from './groups/GroupFrames'
 import type { GroupView } from './groups/group-view'
-import { PlaceSelectionBar } from './groups/PlaceSelectionBar'
+import { PlaceSelectionBar, SelectionStatus } from './groups/PlaceSelectionBar'
 import type { HubLinksMode } from './hubs'
 import { minimapColor } from './model/diff-view'
 import { createHighlighter } from './model/highlight'
@@ -89,8 +90,13 @@ export function FlowCanvas({
     <div className="diagram-canvas">
       <EdgeMarkerDefs />
       {children}
+      {selectable && <SelectionStatus count={selection.tables.length} />}
       {selection.tables.length > 0 && (
-        <PlaceSelectionBar tables={selection.tables} onClear={selection.clear} />
+        <PlaceSelectionBar
+          tables={selection.tables}
+          onPlaced={selection.unselect}
+          onClear={selection.clear}
+        />
       )}
       <ReactFlow
         nodes={display.nodes}
@@ -126,7 +132,7 @@ export function FlowCanvas({
         fitView
       >
         <OverviewZoom />
-        <SelectionBoxWatch onChange={selection.setBoxing} />
+        <SelectionGuard onBoxingChange={selection.setBoxing} />
         <GroupFrames frames={groupDisplay.frames} proposed={groups?.proposed ?? false} />
         <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
         <MiniMap<TableFlowNode>
@@ -163,7 +169,7 @@ function useSelection(
   onNodesChange: Props['onNodesChange'],
 ) {
   const shift = useKeyPress('Shift')
-  // A selection box keeps selecting on until released, even once Shift is let go.
+  // A selection box being drawn keeps selecting on until released, even once Shift is let go.
   const [boxing, setBoxing] = useState(false)
   const tables = useMemo(
     () => (selectable ? nodes.filter((n) => n.selected && !hidden.has(n.id)).map((n) => n.id) : []),
@@ -194,16 +200,33 @@ function useSelection(
     document.addEventListener('keydown', onKeyDown)
     return () => document.removeEventListener('keydown', onKeyDown)
   }, [any, clear])
-  return { tables, clear, selecting: selectable && (shift || boxing), setBoxing }
+  return { tables, clear, unselect, selecting: selectable && (shift || boxing), setBoxing }
 }
 
 const isTextField = (target: EventTarget | null) =>
   target instanceof HTMLElement &&
   (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
 
-/** Reports whether a selection box is being drawn (from the press on), from inside <ReactFlow>. */
-function SelectionBoxWatch({ onChange }: { onChange: (boxing: boolean) => void }) {
-  const boxing = useStore((state) => state.userSelectionRect !== null)
-  useEffect(() => onChange(boxing), [boxing, onChange])
+/**
+ * Keeps React Flow's selection state to what this canvas uses, from inside <ReactFlow>: reports
+ * whether a selection box is being drawn. Its store is corrected as soon as it changes, before any
+ * render: no overlay over the selected cards once a box is drawn (it would catch their clicks and
+ * hover, and move them with the arrow keys without saving), and no box start left over by a press
+ * whose Shift was let go before the button (React Flow would then draw a box on a mere move).
+ */
+function SelectionGuard({ onBoxingChange }: { onBoxingChange: (boxing: boolean) => void }) {
+  const store = useStoreApi()
+  const boxing = useStore((state) => state.userSelectionActive)
+  useEffect(() => onBoxingChange(boxing), [boxing, onBoxingChange])
+  useEffect(
+    () =>
+      store.subscribe((state) => {
+        if (state.nodesSelectionActive) store.setState({ nodesSelectionActive: false })
+        // Shift is React Flow's multi-selection key here.
+        if (state.userSelectionRect && !state.userSelectionActive && !state.multiSelectionActive)
+          store.setState({ userSelectionRect: null })
+      }),
+    [store],
+  )
   return null
 }

@@ -124,6 +124,12 @@ async function shiftClick(...tables: string[]) {
   for (const name of tables) await clickCard(name, { shift: true })
 }
 
+/** The empty canvas, where a Shift+drag draws a selection box. */
+const pane = () => document.querySelector('.react-flow__pane') as HTMLElement
+
+const shiftDown = () => fireEvent.keyDown(document, { key: 'Shift', shiftKey: true })
+const shiftUp = () => fireEvent.keyUp(document, { key: 'Shift' })
+
 /** The layout saves sent so far (the positions of moved tables). */
 const layoutSaves = () =>
   vi
@@ -173,7 +179,10 @@ describe('placing selected tables into a group', () => {
       path: ASSIGNMENTS,
       body: { assignments: { users: 'accounts', invoices: 'accounts' }, clear: [] },
     })
-    expect(screen.queryByRole('toolbar', { name: 'Selected tables' })).toBeNull()
+    // Placed: the tables leave the selection.
+    await waitFor(() =>
+      expect(screen.queryByRole('toolbar', { name: 'Selected tables' })).toBeNull(),
+    )
     expect((await card('users')).classList).not.toContain('selected')
     expect(await screen.findByText('2 tables placed in "Accounts".')).toBeTruthy()
 
@@ -222,7 +231,9 @@ describe('placing selected tables into a group', () => {
       assignments: { users: id, invoices: id },
       clear: [],
     })
-    expect(screen.queryByRole('toolbar', { name: 'Selected tables' })).toBeNull()
+    await waitFor(() =>
+      expect(screen.queryByRole('toolbar', { name: 'Selected tables' })).toBeNull(),
+    )
     expect(await screen.findByText('2 tables placed in "Core".')).toBeTruthy()
     // One gesture: a single notice, a single undo.
     expect(screen.getAllByRole('button', { name: 'Undo' })).toHaveLength(1)
@@ -331,5 +342,108 @@ describe('placing selected tables into a group', () => {
     expect(JSON.parse(String(layoutSaves()[0]?.[1]?.body))).toEqual({
       positions: [{ table: 'sessions', x: 1630, y: 20 }],
     })
+  })
+
+  it('does not stay in selection mode when Shift is let go before the button', async () => {
+    const { updateView } = renderWorkspace()
+    await groupsLoaded()
+    // On the empty canvas: the press would start a selection box.
+    shiftDown()
+    mouse(pane(), 'pointerdown', { shiftKey: true, clientX: 5, clientY: 5 })
+    shiftUp()
+    mouse(pane(), 'pointerup', { clientX: 5, clientY: 5 })
+    mouse(pane(), 'click', { clientX: 5, clientY: 5 })
+    // On a card.
+    const sessions = await card('sessions')
+    shiftDown()
+    mouse(sessions, 'pointerdown', { shiftKey: true })
+    mouse(sessions, 'mousedown', { shiftKey: true })
+    shiftUp()
+    for (const type of ['pointerup', 'mouseup', 'click']) mouse(sessions, type)
+
+    await clickCard('users')
+    expect(updateView).toHaveBeenCalledWith({ active: 'users' })
+    expect((await card('users')).classList).not.toContain('selected')
+    expect(screen.queryByRole('toolbar')).toBeNull()
+    // Shift alone, the button up: moving the mouse draws no box.
+    shiftDown()
+    mouse(pane(), 'pointermove', { shiftKey: true, clientX: 80, clientY: 80 })
+    shiftUp()
+    expect(document.querySelector('.react-flow__selection')).toBeNull()
+    expect(screen.queryByRole('toolbar')).toBeNull()
+  })
+
+  it('selects with a Shift+drag box and leaves the cards clickable afterwards', async () => {
+    const { updateView } = renderWorkspace()
+    await groupsLoaded()
+    shiftDown()
+    mouse(pane(), 'pointerdown', { shiftKey: true, clientX: 0, clientY: 0 })
+    mouse(pane(), 'pointermove', { shiftKey: true, clientX: 40, clientY: 40 })
+    mouse(pane(), 'pointermove', { shiftKey: true, clientX: 80, clientY: 80 })
+    mouse(pane(), 'pointerup', { shiftKey: true, clientX: 80, clientY: 80 })
+    mouse(pane(), 'click', { shiftKey: true, clientX: 80, clientY: 80 })
+    shiftUp()
+
+    // jsdom measures nothing: every card counts as inside the box.
+    const bar = await screen.findByRole('toolbar', { name: 'Selected tables' })
+    expect(within(bar).getByText('4 tables selected')).toBeTruthy()
+    expect(activeCalls(updateView)).toEqual([])
+    // No overlay over the selected cards (it would catch their clicks and move them unsaved).
+    expect(document.querySelector('.react-flow__nodesselection')).toBeNull()
+    await clickCard('users')
+    expect(updateView).toHaveBeenCalledWith({ active: 'users' })
+  })
+
+  it('toggles a card on a Shift+click that moves a little, keeping the others selected', async () => {
+    renderWorkspace()
+    await groupsLoaded()
+    await shiftClick('invoices')
+    const users = await card('users')
+    shiftDown()
+    mouse(users, 'pointerdown', { shiftKey: true, clientX: 10, clientY: 10 })
+    mouse(users, 'mousedown', { shiftKey: true, clientX: 10, clientY: 10 })
+    mouse(users, 'pointermove', { shiftKey: true, clientX: 11, clientY: 10 })
+    mouse(users, 'pointerup', { shiftKey: true, clientX: 11, clientY: 10 })
+    mouse(users, 'mouseup', { shiftKey: true, clientX: 11, clientY: 10 })
+    mouse(users, 'click', { shiftKey: true, clientX: 11, clientY: 10 })
+    shiftUp()
+
+    const bar = await screen.findByRole('toolbar', { name: 'Selected tables' })
+    expect(within(bar).getByText('2 tables selected')).toBeTruthy()
+    expect((await card('invoices')).classList).toContain('selected')
+    expect((await card('users')).classList).toContain('selected')
+  })
+
+  it('keeps the selection when the placement is refused', async () => {
+    renderWorkspace()
+    await groupsLoaded()
+    const answer = vi.mocked(fetch).getMockImplementation()
+    vi.mocked(fetch).mockImplementation(async (path, init) =>
+      init?.method === 'PATCH' && String(path).includes('groups-assignments')
+        ? Response.json({ error: { code: 'internal_error', message: 'Boom' } }, { status: 500 })
+        : (answer as typeof fetch)(path, init),
+    )
+    const user = userEvent.setup()
+    await shiftClick('users', 'invoices')
+    const bar = await screen.findByRole('toolbar', { name: 'Selected tables' })
+    await user.click(within(bar).getByRole('button', { name: 'Accounts' }))
+
+    await waitFor(() => expect(screen.getByText(/Boom|went wrong|error/i)).toBeTruthy())
+    expect(within(bar).getByText('2 tables selected')).toBeTruthy()
+    expect((await card('users')).classList).toContain('selected')
+  })
+
+  it('announces the count from a live region there before anything is selected', async () => {
+    renderWorkspace()
+    await groupsLoaded()
+    const status = await waitFor(() => {
+      const found = document.querySelector<HTMLElement>('[data-selection-status]')
+      if (!found) throw new Error('no selection status')
+      return found
+    })
+    expect(status.getAttribute('aria-live')).toBe('polite')
+    expect(status.textContent).toBe('')
+    await shiftClick('users', 'invoices')
+    expect(status.textContent).toBe('2 tables selected')
   })
 })

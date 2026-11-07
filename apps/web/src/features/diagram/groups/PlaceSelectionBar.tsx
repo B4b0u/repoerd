@@ -12,8 +12,24 @@ import { useGroupsTranslation } from './groups-i18n'
 interface Props {
   /** The selected tables, at least one. */
   tables: string[]
-  /** Empties the selection: after a placement, or from the bar's own button. */
+  /** The tables were placed: they leave the selection (a refused placement keeps them). */
+  onPlaced: (tables: string[]) => void
+  /** Empties the selection (the bar's own button). */
   onClear: () => void
+}
+
+/**
+ * The count of selected tables for assistive technologies: there before the first selection, so
+ * that the first count is announced too (a live region inserted with its text is not).
+ */
+export function SelectionStatus({ count }: { count: number }) {
+  const { t } = useGroupsTranslation()
+  return (
+    // A live region without the status role: the canvas's banners are the page's statuses.
+    <div aria-live="polite" aria-atomic className="sr-only" data-selection-status>
+      {count > 0 ? t('selection.count', { count }) : ''}
+    </div>
+  )
 }
 
 /**
@@ -21,7 +37,7 @@ interface Props {
  * group or in a new group, as one gesture with its "Undo" notice. Nothing without the editing
  * commands.
  */
-export function PlaceSelectionBar({ tables, onClear }: Props) {
+export function PlaceSelectionBar({ tables, onPlaced, onClear }: Props) {
   const editing = useGroupEditing()
   const { t } = useGroupsTranslation()
   const [creating, setCreating] = useState(false)
@@ -39,18 +55,22 @@ export function PlaceSelectionBar({ tables, onClear }: Props) {
 
   const { view, edits, schema } = editing
   const count = tables.length
-  const placeIn = (target: string | null, undoLabel: string) => {
-    void edits.place(tables, target, { undoLabel })
-    onClear()
-  }
+  const placed = (done: Promise<boolean>) =>
+    void done.then((ok) => {
+      if (ok) onPlaced(tables)
+    })
+  const placeIn = (target: string | null, undoLabel: string) =>
+    placed(edits.place(tables, target, { undoLabel }))
   const name = draft.trim()
   const create = (event: FormEvent) => {
     event.preventDefault()
     if (name === '') return
-    void edits.run((saved) => newGroupEdits(schema, saved, name, tables), {
-      undoLabel: t('notices.placed', { count, name }),
-    })
-    onClear()
+    setCreating(false)
+    placed(
+      edits.run((saved) => newGroupEdits(schema, saved, name, tables), {
+        undoLabel: t('notices.placed', { count, name }),
+      }),
+    )
   }
 
   return (
@@ -60,9 +80,7 @@ export function PlaceSelectionBar({ tables, onClear }: Props) {
       className="absolute bottom-16 left-1/2 z-10 flex w-max max-w-[calc(100%-1.5rem)] -translate-x-1/2 flex-col gap-1.5 rounded-lg border bg-card p-1.5 text-sm shadow-md"
     >
       <div className="flex max-h-32 flex-wrap items-center gap-1 overflow-y-auto">
-        <span className="px-2 font-medium" aria-live="polite">
-          {t('selection.count', { count })}
-        </span>
+        <span className="px-2 font-medium">{t('selection.count', { count })}</span>
         <span className="pr-1 text-muted-foreground">{t('selection.placeInto')}</span>
         {view.groups.map((group) => (
           <Button

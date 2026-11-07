@@ -67,7 +67,9 @@ function DiffBadge({ diff }: { diff: NodeDiff }) {
   )
 }
 
-export const TableNode = memo(function TableNode({ data, selected }: NodeProps<TableFlowNode>) {
+type CardProps = NodeProps<TableFlowNode>
+
+function TableCard({ data, selected }: CardProps) {
   const { theme } = useThemeContext()
   const foreignKeys = new Set(data.foreignKeyColumns)
   const nameOnly = data.mode === 'TABLE_NAME'
@@ -171,4 +173,13 @@ export const TableNode = memo(function TableNode({ data, selected }: NodeProps<T
       </span>
     </div>
   )
-})
+}
+
+/**
+ * The card only shows its data and whether it is selected: the other props (`selectable`,
+ * `draggable`, `dragging`, its position...) change without changing it, e.g. on every Shift press.
+ */
+export const sameCard = (a: CardProps, b: CardProps) =>
+  a.data === b.data && a.selected === b.selected
+
+export const TableNode = memo(TableCard, sameCard)
