@@ -209,6 +209,7 @@
 }
 
 /* Group frames: in the canvas's coordinates, under the edges and the cards, never in the way. */
+/* Applies to any ViewportPortal content of this canvas: the group frames rely on it. */
 .diagram-canvas .react-flow__viewport-portal {
   z-index: -1;
   pointer-events: none;

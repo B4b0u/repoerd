@@ -184,11 +184,17 @@ describe('group frames on the diagram', () => {
     )
   })
 
-  it('draws no frame in the related-tables view, and keeps the card colors', async () => {
+  it('draws no frame in the related-tables view, and names the group on every grouped card', async () => {
     const { container } = renderWorkspace(configured, { focus: 'invoices' })
     await vi.waitFor(() => expect(container.querySelector('.table-node')).toBeTruthy())
     await vi.waitFor(() => expect(container.querySelector('.table-node--grouped')).toBeTruthy())
     expect(frames(container)).toHaveLength(0)
+    const invoices = [...container.querySelectorAll('.table-node')].find(
+      (card) => card.querySelector('.table-node__title')?.textContent === 'invoices',
+    )
+    expect(invoices?.querySelector('.table-node__group-tag')?.textContent).toBe('Billing')
+    const cards = container.querySelectorAll('.table-node--grouped')
+    expect(container.querySelectorAll('.table-node__group-tag')).toHaveLength(cards.length)
   })
 
   it('shows the diagram without groups when they cannot be loaded', async () => {

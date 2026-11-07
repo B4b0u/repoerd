@@ -20,7 +20,7 @@ export type NodeHighlight = 'none' | 'active' | 'related' | 'dimmed'
 export interface NodeGroup {
   name: string
   colors: { dark: GroupColors; light: GroupColors }
-  /** Outside its group's frame: the card names the group. */
+  /** Outside any frame of its group (far from it, or no frames drawn): the card names the group. */
   far: boolean
 }
 

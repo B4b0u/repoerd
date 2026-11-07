@@ -8,7 +8,7 @@ import type { GroupView } from './group-view'
 
 type ThemedColors = NodeGroup['colors']
 
-export interface DrawnFrame extends GroupFrame {
+export interface DrawnFrame extends Omit<GroupFrame, 'members'> {
   name: string
   colors: ThemedColors
 }
@@ -37,7 +37,8 @@ function visibleBoxes(nodes: readonly TableFlowNode[], hidden: ReadonlySet<strin
  * What the groups add to the canvas. Which tables sit in their group's frame (and which are
  * far from it) is decided from the positions at rest, so it changes once a dragged table is
  * dropped, never during the drag; the frames themselves follow the live positions.
- * `withFrames` false: the cards keep their colours, no frame is drawn and no table is far.
+ * `withFrames` false: no frame is drawn, so every grouped card names its group (never colour
+ * alone).
  */
 export function useGroupDisplay(
   nodes: readonly TableFlowNode[],
@@ -75,17 +76,20 @@ export function useGroupDisplay(
     for (const [table, groupId] of view?.membership ?? []) {
       const group = groupId === null ? undefined : groups.get(groupId)
       if (!group) continue
-      result.set(table, { ...group, far: classification?.outliers.has(table) ?? false })
+      const far = withFrames ? (classification?.outliers.has(table) ?? false) : true
+      result.set(table, { ...group, far })
     }
     return result
-  }, [view, groups, classification])
+  }, [view, groups, classification, withFrames])
 
   const frames = useMemo(
     () =>
       classification
         ? groupFrames(boxes, classification.clusters).flatMap((frame) => {
             const group = groups.get(frame.groupId)
-            return group ? [{ ...frame, ...group }] : []
+            if (!group) return []
+            const { members: _members, ...geometry } = frame
+            return [{ ...geometry, ...group }]
           })
         : [],
     [classification, boxes, groups],

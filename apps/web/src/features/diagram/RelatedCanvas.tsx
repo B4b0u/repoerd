@@ -100,7 +100,7 @@ export function RelatedCanvas({
       hubs={hubs}
       hubLinks={hubLinks}
       onHubLinksChange={onHubLinksChange}
-      // A computed, partial view: the cards keep their group colour, without frames.
+      // A computed, partial view: no frames, each grouped card names its group.
       groups={groups}
       frames={false}
     >
