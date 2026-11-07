@@ -29,7 +29,7 @@ describe('the patch of @liam-hq/schema', () => {
   })
 })
 
-const PG = `import { check, foreignKey, index, integer, pgMaterializedView, pgSchema, pgTable, pgView, primaryKey, text, timestamp, unique, uniqueIndex, uuid, varchar } from 'drizzle-orm/pg-core'
+const PG = `import { check, customType, foreignKey, index, integer, pgMaterializedView, pgSchema, pgTable, pgView, primaryKey, text, timestamp, unique, uniqueIndex, uuid, varchar } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
 `
 
@@ -311,6 +311,174 @@ export const people = pgTable('people', { id: integer('id').primaryKey(), firstN
     expect(columns?.id).toMatchObject({ name: 'id', nameExplicit: true })
     expect(columns?.firstName).toMatchObject({ name: 'firstName', nameExplicit: false })
     expect(columns?.nick).toMatchObject({ name: 'nick', type: 'varchar(40)', nameExplicit: false })
+  })
+
+  it('uses the dataType literal of each named customType form', async () => {
+    const schema = await parseDrizzle(`
+const closingReal8 = customType<{ data: number }>({ dataType() { return 'real' } })
+const asArrow = customType({ dataType: () => 'citext' })
+const asFn = customType({ dataType: function () { return 'text' } })
+const asTpl = customType({ dataType() { return \`bytea\` } })
+export const values = pgTable('values', {
+  a: closingReal8('a'),
+  b: asArrow('b'),
+  c: asFn('c'),
+  d: asTpl('d'),
+})
+`)
+    expect(schema.tables.values?.columns).toMatchObject({
+      a: { name: 'a', type: 'real' },
+      b: { name: 'b', type: 'citext' },
+      c: { name: 'c', type: 'text' },
+      d: { name: 'd', type: 'bytea' },
+    })
+  })
+
+  it('resolves a customType declared after the table that uses it', async () => {
+    const schema = await parseDrizzle(`
+export const values = pgTable('values', { x: later('x') })
+export const later = customType({ dataType() { return 'real' } })
+`)
+    expect(schema.tables.values?.columns.x).toMatchObject({ name: 'x', type: 'real' })
+  })
+
+  it('uses the dataType literal of a customType column from a spread call', async () => {
+    const schema = await parseDrizzle(`
+const citext = customType({ dataType() { return 'citext' } })
+const contact = () => ({ email: citext('email').notNull() })
+export const people = pgTable('people', { id: uuid('id').primaryKey(), ...contact() })
+`)
+    expect(schema.tables.people?.columns.email).toMatchObject({ name: 'email', type: 'citext' })
+  })
+
+  it('keeps the variable name when dataType is not a string literal', async () => {
+    const schema = await parseDrizzle(`
+const varcharCt = customType<{ data: string; config: { length: number } }>({
+  dataType(config) { return \`varchar(\${config.length})\` },
+})
+export const values = pgTable('values', { x: varcharCt('x') })
+`)
+    expect(schema.tables.values?.columns.x).toMatchObject({ name: 'x', type: 'varcharCt' })
+  })
+
+  it('keeps an inline customType column and its notNull chain', async () => {
+    const schema = await parseDrizzle(`
+export const people = pgTable('people', {
+  email: customType({ dataType() { return 'citext' } })('email').notNull(),
+})
+`)
+    expect(schema.tables.people?.columns.email).toMatchObject({
+      name: 'email',
+      type: 'citext',
+      notNull: true,
+    })
+  })
+
+  it('still yields a relationship from a customType column with .references()', async () => {
+    const schema = await parseDrizzle(`
+export const orgs = pgTable('orgs', { id: integer('id').primaryKey() })
+const orgId = customType({ dataType() { return 'integer' } })
+export const members = pgTable('members', {
+  orgId: orgId('org_id').references(() => orgs.id),
+})
+`)
+    expect(schema.tables.members?.constraints.members_org_id_orgs_id_fk).toMatchObject({
+      type: 'FOREIGN KEY',
+      columnNames: ['org_id'],
+      targetTableName: 'orgs',
+      targetColumnNames: ['id'],
+    })
+  })
+
+  it('keeps a pg-core import over a customType of the same name in the concatenated input', async () => {
+    const schema = await parse(
+      `const text = customType({ dataType() { return 'citext' } })
+import { pgTable, text } from 'drizzle-orm/pg-core'
+export const values = pgTable('values', { y: text('y') })
+`,
+      'drizzle',
+    )
+    expect(schema.errors.map((error) => error.message)).toEqual([])
+    expect(schema.value.tables.values?.columns.y).toMatchObject({ name: 'y', type: 'text' })
+  })
+
+  it('keeps the variable name when the same customType is declared with different literals', async () => {
+    const schema = await parseDrizzle(`
+const foo = customType({ dataType() { return 'citext' } })
+const foo = customType({ dataType() { return 'text' } })
+export const values = pgTable('values', { x: foo('x') })
+`)
+    expect(schema.tables.values?.columns.x).toMatchObject({ name: 'x', type: 'foo' })
+  })
+
+  it('resolves a customType declared twice with the same literal', async () => {
+    const schema = await parseDrizzle(`
+const foo = customType({ dataType() { return 'citext' } })
+const foo = customType({ dataType() { return 'citext' } })
+export const values = pgTable('values', { x: foo('x') })
+`)
+    expect(schema.tables.values?.columns.x).toMatchObject({ name: 'x', type: 'citext' })
+  })
+
+  it('does not let call options alter a resolved dataType literal', async () => {
+    const schema = await parseDrizzle(`
+const ts = customType({ dataType() { return 'timestamp' } })
+const v = customType({ dataType() { return 'varchar' } })
+export const values = pgTable('values', {
+  a: ts('a', { withTimezone: true }),
+  b: v('b', { length: 5 }),
+})
+`)
+    expect(schema.tables.values?.columns).toMatchObject({
+      a: { name: 'a', type: 'timestamp' },
+      b: { name: 'b', type: 'varchar' },
+    })
+  })
+
+  it('reads an inline customType with a type argument and a notNull chain', async () => {
+    const schema = await parseDrizzle(`
+export const people = pgTable('people', {
+  a: customType<{ data: string }>({ dataType() { return 'citext' } })('a').notNull(),
+})
+`)
+    expect(schema.tables.people?.columns.a).toMatchObject({
+      name: 'a',
+      type: 'citext',
+      notNull: true,
+    })
+  })
+
+  it('still yields a relationship from an inline customType column with .references()', async () => {
+    const schema = await parseDrizzle(`
+export const other = pgTable('other', { id: integer('id').primaryKey() })
+export const members = pgTable('members', {
+  orgId: customType({ dataType() { return 'integer' } })('org_id').references(() => other.id),
+})
+`)
+    expect(schema.tables.members?.constraints.members_org_id_other_id_fk).toMatchObject({
+      type: 'FOREIGN KEY',
+      columnNames: ['org_id'],
+      targetTableName: 'other',
+      targetColumnNames: ['id'],
+    })
+  })
+
+  it('keeps type customType when an inline dataType is not a string literal', async () => {
+    const schema = await parseDrizzle(`
+export const values = pgTable('values', {
+  x: customType({ dataType(config) { return \`varchar(\${config.length})\` } })('x'),
+})
+`)
+    expect(schema.tables.values?.columns.x).toMatchObject({ name: 'x', type: 'customType' })
+  })
+
+  it('names an inline customType column from the property key when the call has no name', async () => {
+    const schema = await parseDrizzle(`
+export const values = pgTable('values', {
+  x: customType({ dataType() { return 'citext' } })(),
+})
+`)
+    expect(schema.tables.values?.columns.x).toMatchObject({ name: 'x', type: 'citext' })
   })
 })
 
