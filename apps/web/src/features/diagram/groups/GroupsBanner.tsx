@@ -21,8 +21,11 @@ interface Props {
 export function GroupsBanner({ repo, sourceId, schema, view, onLeaveReproposal }: Props) {
   const { t } = useGroupsTranslation()
   const { run, pending } = useGroupEdits(repo, sourceId, schema, view)
-  const saveProposals = () => run([{ kind: 'saveAll', groups: view.groups, assignments: {} }])
-  const ignoreProposals = () => run([{ kind: 'saveAll', groups: [], assignments: {} }])
+  // Groups saved meanwhile elsewhere are shown, not overwritten.
+  const saveProposals = () =>
+    run([{ kind: 'saveAll', groups: view.groups, assignments: {} }], { onlyUnconfigured: true })
+  const ignoreProposals = () =>
+    run([{ kind: 'saveAll', groups: [], assignments: {} }], { onlyUnconfigured: true })
   const replace = async () => {
     const done = await run([{ kind: 'saveAll', groups: view.groups, assignments: {} }], {
       undoLabel: t('replaced'),

@@ -23,7 +23,15 @@ export type GroupGesture = GroupEdit[] | ((current: TableGroupsResponse) => Grou
 export interface GroupEditOptions {
   /** Text of the notice shown once the gesture is saved, with "Undo"; no notice without it. */
   undoLabel?: string
+  /**
+   * The gesture decides about the proposals (save them, ignore them): dropped, with a notice, when
+   * the source turns out to be configured already (by a teammate, or in another tab).
+   */
+  onlyUnconfigured?: boolean
 }
+
+/** Long enough to reach "Undo" (sonner's default, 4 s, is not). */
+export const UNDO_NOTICE_DURATION_MS = 10_000
 
 function send(repo: RepoRef, sourceId: string, edit: GroupEdit): Promise<void> {
   switch (edit.kind) {
@@ -102,9 +110,20 @@ export function useGroupEdits(repo: RepoRef, sourceId: string, schema: DbSchema,
   async function perform(gesture: GroupGesture, options: GroupEditOptions): Promise<boolean> {
     let cached: TableGroupsResponse
     try {
+      const read = queryClient.getQueryData<TableGroupsResponse>(key) !== undefined
       cached = await queryClient.ensureQueryData(groupsQuery(repo, sourceId))
+      // Saving the proposals of a source shown as never configured would overwrite the groups a
+      // teammate (or another tab) saved since it was read: read it again first.
+      if (read && !cached.configured) {
+        cached = await queryClient.fetchQuery({ ...groupsQuery(repo, sourceId), staleTime: 0 })
+      }
     } catch (error) {
       report(error)
+      return false
+    }
+    if (options.onlyUnconfigured && cached.configured) {
+      // The read put the saved groups in the cache: they replace the proposals on screen.
+      toast(t('alreadySaved'))
       return false
     }
     const first: GroupEdit | undefined = cached.configured
@@ -134,6 +153,7 @@ export function useGroupEdits(repo: RepoRef, sourceId: string, schema: DbSchema,
     }
     if (options.undoLabel !== undefined) {
       toast(options.undoLabel, {
+        duration: UNDO_NOTICE_DURATION_MS,
         action: {
           label: t('undo'),
           onClick: () => void run((current) => undoEdits(edits, base, current)),

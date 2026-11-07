@@ -11,6 +11,7 @@ export const groups: GroupsCatalog = {
   reproposeHint:
     "Afficher les groupes proposés d'après les fichiers du schéma à la place de ceux enregistrés",
   replaced: 'Groupes remplacés par les propositions.',
+  alreadySaved: "Un membre de l'équipe a déjà enregistré les groupes.",
   tag: 'Groupe : {{name}}',
   ungrouped: 'Hors groupe',
   showGroup: 'Afficher le groupe {{name}}',

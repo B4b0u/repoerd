@@ -112,7 +112,15 @@ function mount(
     )
   }
   renderWithApp(<Workspace />, client)
-  return { sent, client, control }
+  return {
+    sent,
+    client,
+    control,
+    /** The groups as another tab or teammate leaves them. */
+    setState: (next: Omit<TableGroupsResponse, 'canEdit'>) => {
+      state = next
+    },
+  }
 }
 
 afterEach(() => {
@@ -145,6 +153,21 @@ describe('proposal banner', () => {
     expect(sent[0]?.body).toEqual({ groups: [], assignments: {} })
     await waitFor(() => expect(screen.queryByRole('status')).toBeNull())
   })
+
+  for (const button of [SAVE, IGNORE]) {
+    it(`shows the groups a teammate saved meanwhile instead of overwriting them ("${button}")`, async () => {
+      const user = userEvent.setup()
+      const { sent, setState } = mount(unconfigured)
+      const target = await screen.findByRole('button', { name: button })
+      setState(saved)
+      await user.click(target)
+
+      expect(await screen.findByText('A teammate already saved the groups.')).toBeTruthy()
+      await waitFor(() => expect(screen.queryByText(/proposed from the schema files/)).toBeNull())
+      expect(document.querySelector('.group-frame--proposed')).toBeNull()
+      expect(sent).toEqual([])
+    })
+  }
 
   it('offers no button without the push right', async () => {
     mount(unconfigured, false)

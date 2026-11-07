@@ -14,6 +14,8 @@ export const groups = {
   repropose: 'Propose again from the files',
   reproposeHint: 'Show the groups proposed from the schema files instead of the saved ones',
   replaced: 'Groups replaced by the proposals.',
+  /** Saving or ignoring proposals of a source someone configured meanwhile (another tab). */
+  alreadySaved: 'A teammate already saved the groups.',
   tag: 'Group: {{name}}',
   ungrouped: 'Ungrouped',
   showGroup: 'Show the group {{name}}',

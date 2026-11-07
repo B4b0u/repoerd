@@ -10,6 +10,17 @@ import { buildGroupView } from '../../src/features/diagram/groups/group-view'
 import { useGroupEdits } from '../../src/features/diagram/groups/use-group-edits'
 import { renderWithApp } from '../render'
 
+// The notices' options, to check how long they stay: sonner itself still shows them.
+const notices = vi.hoisted(() => ({ calls: [] as unknown[][] }))
+vi.mock('sonner', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('sonner')>()
+  const toast = Object.assign((...args: Parameters<typeof actual.toast>) => {
+    notices.calls.push(args)
+    return actual.toast(...args)
+  }, actual.toast)
+  return { ...actual, toast }
+})
+
 const repo = { owner: 'acme', name: 'shop' }
 const source = 'db'
 
@@ -52,6 +63,8 @@ function fakeServer(initial: Omit<TableGroupsResponse, 'canEdit'>) {
     refuseAfter: 0,
     /** Reads wait while true: a refetch then cannot hide what the cache holds. */
     holdReads: false,
+    /** Reads still answered once `holdReads` is set (the read before a gesture). */
+    readsBeforeHold: 0,
     reads: 0,
     /** Cache of the client seen by each write, when it arrived. */
     seen: [] as unknown[],
@@ -63,7 +76,8 @@ function fakeServer(initial: Omit<TableGroupsResponse, 'canEdit'>) {
       const method = init?.method ?? 'GET'
       if (method === 'GET') {
         server.reads++
-        if (server.holdReads) return new Promise<Response>(() => {})
+        if (server.holdReads && server.readsBeforeHold > 0) server.readsBeforeHold--
+        else if (server.holdReads) return new Promise<Response>(() => {})
         return Response.json({ ...server.state, canEdit: true })
       }
       const body = init?.body ? JSON.parse(init.body as string) : undefined
@@ -204,6 +218,7 @@ describe('useGroupEdits', () => {
     server.refuse = tooManyGroups
     server.refuseAfter = 1
     server.holdReads = true
+    server.readsBeforeHold = 1 // the source is read again before its proposals are saved
     const created = { id: 'new1', name: 'new', color: '#1e90ff', origins: [] }
 
     await act(async () => {
@@ -219,6 +234,54 @@ describe('useGroupEdits', () => {
       groups: proposeGroups(schema),
       assignments: {},
       canEdit: true,
+    })
+  })
+
+  it('reads the source again before saving the proposals: another tab may have saved groups', async () => {
+    const server = fakeServer({ configured: false, groups: [], assignments: {} })
+    const edits = await mount(server)
+    // A teammate saves groups while this tab still shows the proposals.
+    server.state = { configured: true, groups: [billing], assignments: {} }
+
+    await act(async () => {
+      await edits().place(['user'], 'billing')
+    })
+
+    // The gesture applies to the saved groups: no proposals overwrite them.
+    expect(server.sent.map((s) => [s.method, s.body])).toEqual([
+      ['PATCH', { assignments: { user: 'billing' }, clear: [] }],
+      [
+        'PUT',
+        {
+          name: 'billing',
+          color: '#e6194b',
+          origins: [...billing.origins, { kind: 'file', path: 'db/user.ts' }],
+        },
+      ],
+    ])
+  })
+
+  it('drops a gesture on the proposals once the source turns out configured, and says so', async () => {
+    const server = fakeServer({ configured: false, groups: [], assignments: {} })
+    const edits = await mount(server)
+    server.state = { configured: true, groups: [billing], assignments: {} }
+    let done: boolean | undefined
+
+    await act(async () => {
+      done = await edits().run(
+        [{ kind: 'saveAll', groups: proposeGroups(schema), assignments: {} }],
+        {
+          onlyUnconfigured: true,
+        },
+      )
+    })
+
+    expect(done).toBe(false)
+    expect(server.sent).toEqual([])
+    expect(await screen.findByText('A teammate already saved the groups.')).toBeTruthy()
+    expect(server.client.getQueryData(groupsKey(repo, source))).toMatchObject({
+      configured: true,
+      groups: [billing],
     })
   })
 
@@ -306,6 +369,10 @@ describe('useGroupEdits', () => {
       })
     })
     expect(await screen.findByText('Group deleted')).toBeTruthy()
+    // Long enough to reach "Undo" (sonner's 4 s default is not).
+    const notice = notices.calls.find(([text]) => text === 'Group deleted')
+    const options = notice?.[1] as { duration?: number } | undefined
+    expect(options?.duration).toBeGreaterThanOrEqual(10_000)
     await userEvent.setup().click(screen.getByRole('button', { name: 'Undo' }))
 
     await waitFor(() => expect(server.sent).toHaveLength(3))
