@@ -1,4 +1,5 @@
 import type { ApiErrorCode, ApiErrorReason } from '@repoerd/contracts'
+import type { TableGroupsProblem } from '@repoerd/model'
 
 export const errors = {
   network: 'Could not reach the server. Check your connection and try again.',
@@ -64,4 +65,14 @@ export const errors = {
     'invalid-compare': 'This comparison is not valid: choose two different branches.',
     'invalid-branch-name': 'This is not a valid branch name.',
   } satisfies Record<ApiErrorReason, string>,
+  /** A refused group write, by `details.problem` ('invalid' keeps the message of the reason). */
+  groupProblems: {
+    'unknown-group': 'This group no longer exists: someone may have deleted it meanwhile.',
+    'too-many-groups': 'At most {{max}} groups per schema source.',
+    'too-many-assignments': 'At most {{max}} tables placed by hand per schema source.',
+    'too-many-sources':
+      'This repository already has groups for {{max}} schema sources, the maximum.',
+    'duplicate-origin':
+      'Two groups claim the same file, folder or Postgres schema. Reload the page and try again.',
+  } satisfies Record<Exclude<TableGroupsProblem, 'invalid'>, string>,
 }

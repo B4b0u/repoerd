@@ -67,4 +67,12 @@ export const errors: Catalog['errors'] = {
     'invalid-compare': 'Cette comparaison est invalide : choisissez deux branches différentes.',
     'invalid-branch-name': "Ce nom de branche n'est pas valide.",
   },
+  groupProblems: {
+    'unknown-group': "Ce groupe n'existe plus : quelqu'un l'a peut-être supprimé entre-temps.",
+    'too-many-groups': 'Au plus {{max}} groupes par source de schéma.',
+    'too-many-assignments': 'Au plus {{max}} tables rangées à la main par source de schéma.',
+    'too-many-sources': 'Ce dépôt a déjà des groupes pour {{max}} sources de schéma, le maximum.',
+    'duplicate-origin':
+      'Deux groupes revendiquent le même fichier, dossier ou schéma Postgres. Rechargez la page et réessayez.',
+  },
 }
