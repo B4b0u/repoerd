@@ -316,3 +316,38 @@ describe('showcase acme/helpdesk (Drizzle)', () => {
     ])
   })
 })
+
+describe('showcase acme/crm (Drizzle)', () => {
+  it('reads the customType columns, the spread calls and the invoicing branch', async () => {
+    const main = await schemaOf('acme', 'crm')
+    expect(Object.keys(main.tables)).toHaveLength(12)
+    expect(main.relationships).toHaveLength(23)
+    const typeOf = (table: string, column: string) =>
+      main.tables[table]?.columns.find((c) => c.name === column)?.type
+    expect(typeOf('companies', 'domain')).toBe('citext')
+    expect(typeOf('notes', 'search')).toBe('tsvector')
+    expect(typeOf('deals', 'amount')).toBe('numeric(12, 2)')
+    // ...tenant() and ...timestamps() are functions of another file of the source.
+    expect(main.tables.contacts?.columns.map((c) => c.name)).toEqual([
+      'id',
+      'workspace_id',
+      'company_id',
+      'email',
+      'first_name',
+      'last_name',
+      'created_at',
+      'updated_at',
+    ])
+    const tenants = new Set(
+      Object.values(main.relationships)
+        .filter((r) => r.from.table === 'workspaces')
+        .map((r) => r.to.table),
+    )
+    expect(tenants.size).toBe(9)
+
+    const feature = await schemaOf('acme', 'crm', 'feature-invoicing')
+    expect(Object.keys(feature.tables).sort()).toEqual(
+      [...Object.keys(main.tables), 'invoice_lines', 'invoices'].sort(),
+    )
+  })
+})

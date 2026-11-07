@@ -1,0 +1,7 @@
+{
+  "defaultBranch": "main",
+  "branches": {
+    "main": "main",
+    "feature/invoicing": "feature-invoicing"
+  }
+}
