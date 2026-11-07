@@ -1,5 +1,5 @@
 import type { TableGroupsResponse } from '@repoerd/contracts'
-import type { DbSchema, Table } from '@repoerd/model'
+import { type DbSchema, proposeGroups, type Table } from '@repoerd/model'
 import { describe, expect, it } from 'vitest'
 import { buildGroupView } from '../../src/features/diagram/groups/group-view'
 
@@ -78,5 +78,28 @@ describe('buildGroupView', () => {
       ['user', null],
       ['post', null],
     ])
+  })
+
+  it('proposes from the compared branch alone and resolves the union against it', () => {
+    // The base branch had a file the compared branch deleted: it must not become a group.
+    const after = schemaOf([table('user', 'db/user.ts'), table('post', 'db/post.ts')])
+    const union = schemaOf([
+      table('legacy', 'db/aaa-legacy.ts'),
+      table('user', 'db/user.ts'),
+      table('post', 'db/post.ts'),
+    ])
+    const unconfigured: TableGroupsResponse = {
+      configured: false,
+      groups: [],
+      assignments: {},
+      canEdit: true,
+    }
+    const view = buildGroupView(union, unconfigured, after)
+    // Same groups, ids and colours as the compared branch shown alone.
+    expect(view.groups).toEqual(proposeGroups(after))
+    expect(view.groups).toEqual(buildGroupView(after, unconfigured).groups)
+    expect(view.membership.get('legacy')).toBeNull()
+    expect(view.membership.get('user')).toBe(view.groups.find((g) => g.name === 'user')?.id)
+    expect(view.proposed).toBe(true)
   })
 })

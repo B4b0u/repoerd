@@ -34,6 +34,8 @@ interface Props {
   updateView: ViewStateUpdate
   /** Comparison: `schema` is the union of both sides and this says what changed. */
   diff?: SchemaDiff
+  /** Comparison: the compared (after) side, which proposes the groups when none is saved. */
+  proposalSchema?: DbSchema
   /**
    * Table count the default display mode is chosen from; the schema's own when absent. A
    * comparison passes the compared branch's, so it opens in the mode the branch has alone.
@@ -58,6 +60,7 @@ function Workspace({
   viewState,
   updateView,
   diff,
+  proposalSchema,
   defaultModeTableCount,
 }: Props) {
   const flow = useReactFlow()
@@ -81,7 +84,10 @@ function Workspace({
   const { t } = useTranslation('compare')
   // Loading or failed: no groups, the diagram shows as usual.
   const groupsQuery = useTableGroups(repo, sourceId)
-  const groups = useMemo(() => buildGroupView(schema, groupsQuery.data), [schema, groupsQuery.data])
+  const groups = useMemo(
+    () => buildGroupView(schema, groupsQuery.data, proposalSchema),
+    [schema, groupsQuery.data, proposalSchema],
+  )
   const changedOnly = viewState.changed === true
   // Leaving the related view remounts the full canvas: it centres the table once placed.
   const [centerAfterRemount, setCenterAfterRemount] = useState<string>()

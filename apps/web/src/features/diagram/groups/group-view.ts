@@ -10,10 +10,16 @@ export interface GroupView {
   canEdit: boolean
 }
 
-/** `response` undefined (loading or failed) → no groups at all. */
+/**
+ * `response` undefined (loading or failed) → no groups at all. `proposalSchema`: the schema the
+ * groups are proposed from when nothing is saved, `schema` by default; a comparison passes its
+ * compared (after) side, so the union's base-only files propose nothing and the groups keep the
+ * colours of that branch shown alone. Membership is always resolved on `schema`.
+ */
 export function buildGroupView(
   schema: DbSchema,
   response: TableGroupsResponse | undefined,
+  proposalSchema: DbSchema = schema,
 ): GroupView {
   if (response === undefined) {
     return {
@@ -23,7 +29,7 @@ export function buildGroupView(
       canEdit: false,
     }
   }
-  const groups = response.configured ? response.groups : proposeGroups(schema)
+  const groups = response.configured ? response.groups : proposeGroups(proposalSchema)
   const assignments = response.configured ? response.assignments : {}
   return {
     proposed: !response.configured && groups.length > 0,

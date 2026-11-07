@@ -167,6 +167,7 @@ export function CompareBody({ repo, query, comparison, viewState, updateView, re
         viewState={viewState}
         updateView={updateView}
         diff={diff}
+        proposalSchema={data.after.schema ?? undefined}
         defaultModeTableCount={
           data.after.schema ? Object.keys(data.after.schema.tables).length : undefined
         }
