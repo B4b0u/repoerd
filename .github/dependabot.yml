@@ -11,6 +11,17 @@ updates:
     ignore:
       # Patched with pnpm (patches/): a new version means redoing the patch and bumping CACHE_VERSION.
       - dependency-name: '@liam-hq/schema'
+      # Follows the Node runtime (node:24 image, .nvmrc): bumped with the Node major.
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
+      # TypeScript 7 has no compiler API yet: dependency-cruiser silently stops seeing type-only
+      # imports (tsPreCompilationDeps). Retry once it can parse with TypeScript 7.
+      - dependency-name: typescript
+        versions: ['>=7']
+      # msw 3.0.4: cancelling the body of a mocked HTTPS response leaves an OpenSSL error that the
+      # next createSign() of the tests throws ("asn1 encoding routines::too long"). Retry later.
+      - dependency-name: msw
+        versions: ['>=3']
   - package-ecosystem: github-actions
     directory: /
     schedule:
