@@ -248,6 +248,16 @@
   cursor: default;
 }
 
+/* Semantic zoom: the group names grow like the table names, to stay readable. */
+.react-flow[data-overview] .group-frame__label {
+  top: calc(4px / var(--canvas-zoom, 1));
+  left: calc(12px / var(--canvas-zoom, 1));
+  max-width: calc(100% - 24px / var(--canvas-zoom, 1));
+  padding: calc(2px / var(--canvas-zoom, 1)) calc(8px / var(--canvas-zoom, 1));
+  font-size: calc(14px / var(--canvas-zoom, 1));
+  line-height: 1.2;
+}
+
 /* Branch comparison: colour and symbol, never colour alone. */
 .table-node--diff-added {
   border-color: var(--diff-added);

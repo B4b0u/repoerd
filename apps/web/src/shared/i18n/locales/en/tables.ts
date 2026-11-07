@@ -8,4 +8,8 @@ export const tables = {
   show: 'Show {{table}}',
   visibleCount: 'Tables shown: {{visible}} of {{total}}',
   noMatch: 'No table matches.',
+  ungrouped: 'Ungrouped',
+  showGroup: 'Show the group {{name}}',
+  collapseGroup: 'Collapse the group {{name}}',
+  expandGroup: 'Expand the group {{name}}',
 }

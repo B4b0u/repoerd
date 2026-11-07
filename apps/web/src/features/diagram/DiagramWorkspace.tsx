@@ -156,6 +156,18 @@ function Workspace({
       )
     } else setHidden(new Set([...tables.hidden, table]))
   }
+  // A group's checkbox: one URL update for all its tables.
+  const setTablesHidden = (list: string[], hide: boolean) => {
+    if (hide) return setHidden(new Set([...tables.hidden, ...list]))
+    const leaveChangedOnly = list.some(hiddenAsUnchanged)
+    updateView(
+      {
+        ...hiddenPatch(names, new Set([...tables.hidden].filter((name) => !list.includes(name)))),
+        ...(leaveChangedOnly ? { changed: undefined } : {}),
+      },
+      { replace: true },
+    )
+  }
   const showAll = () =>
     updateView({ ...hiddenPatch(names, new Set()), changed: undefined }, { replace: true })
   const select = (table: string) => {
@@ -183,6 +195,8 @@ function Workspace({
         onShowAll={showAll}
         onHideAll={() => setHidden(new Set(names))}
         onSelect={select}
+        groups={groups}
+        onSetHidden={setTablesHidden}
         changes={
           diff && {
             label: t('panel.tab', { count: changedTables(diff).length + diff.enums.length }),
