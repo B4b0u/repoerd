@@ -35,6 +35,13 @@ export const groups: GroupsCatalog = {
     create: 'Créer',
     cancel: 'Annuler',
   },
+  selection: {
+    toolbar: 'Tables sélectionnées',
+    count_one: '{{count}} table sélectionnée',
+    count_other: '{{count}} tables sélectionnées',
+    placeInto: 'Ranger dans…',
+    clear: 'Vider la sélection',
+  },
   notices: {
     deleted: 'Groupe « {{name}} » supprimé.',
     placed_one: '{{count}} table rangée dans « {{name}} ».',

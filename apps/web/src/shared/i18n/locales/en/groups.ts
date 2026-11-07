@@ -40,6 +40,14 @@ export const groups = {
     create: 'Create',
     cancel: 'Cancel',
   },
+  /** The bar of the tables selected on the canvas (Shift+click, Shift+drag). */
+  selection: {
+    toolbar: 'Selected tables',
+    count_one: '{{count}} table selected',
+    count_other: '{{count}} tables selected',
+    placeInto: 'Place into…',
+    clear: 'Clear the selection',
+  },
   notices: {
     deleted: 'Group "{{name}}" deleted.',
     placed_one: '{{count}} table placed in "{{name}}".',

@@ -67,13 +67,14 @@ function DiffBadge({ diff }: { diff: NodeDiff }) {
   )
 }
 
-export const TableNode = memo(function TableNode({ data }: NodeProps<TableFlowNode>) {
+export const TableNode = memo(function TableNode({ data, selected }: NodeProps<TableFlowNode>) {
   const { theme } = useThemeContext()
   const foreignKeys = new Set(data.foreignKeyColumns)
   const nameOnly = data.mode === 'TABLE_NAME'
   const classes = ['table-node', `table-node--${data.highlight}`]
   if (nameOnly) classes.push('table-node--name-only')
   if (data.diff) classes.push(`table-node--diff-${data.diff.status}`)
+  if (selected) classes.push('table-node--selected')
   const colors = data.group?.colors[theme]
   if (colors) classes.push('table-node--grouped')
   return (

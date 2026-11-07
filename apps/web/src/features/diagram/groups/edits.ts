@@ -175,3 +175,14 @@ export function newGroup(existing: readonly TableGroup[], name: string): TableGr
     (GROUP_PALETTE[existing.length % GROUP_PALETTE.length] as string)
   return { id: crypto.randomUUID().replaceAll('-', '').slice(0, 32), name, color, origins: [] }
 }
+
+/** One gesture (one notice, one undo): a new group named `name`, then the tables placed in it. */
+export function newGroupEdits(
+  schema: DbSchema,
+  current: TableGroupsResponse,
+  name: string,
+  tables: string[],
+): GroupEdit[] {
+  const save: GroupEdit = { kind: 'saveGroup', group: newGroup(current.groups, name) }
+  return [save, ...placeEdits(schema, applyEdits(current, [save]), tables, save.group.id)]
+}

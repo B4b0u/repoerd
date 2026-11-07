@@ -21,6 +21,7 @@ import { PageMessage } from '../../shared/ui/PageMessage'
 import { type SaveOutcome, saveLayout, savePositions, trackLayoutSave, useLayout } from './api'
 import { FlowCanvas } from './FlowCanvas'
 import { GroupsBanner } from './groups/GroupsBanner'
+import { useGroupEditing } from './groups/group-editing'
 import type { GroupView } from './groups/group-view'
 import { layoutTables } from './layout/auto-layout'
 import { placeTables } from './layout/place-tables'
@@ -122,6 +123,8 @@ export function DiagramCanvas({
   const { fitView } = useReactFlow()
   const apiMessage = useApiErrorMessage()
   const [placeError, setPlaceError] = useState<unknown>()
+  // Several tables can be selected and placed into a group together (editing commands only).
+  const selectable = useGroupEditing()?.editable === true
 
   // The notice's "Retry" needs the batcher, which needs this send: a ref closes the loop.
   const retryRef = useRef<() => void>(() => {})
@@ -298,6 +301,7 @@ export function DiagramCanvas({
         onHubLinksChange={onHubLinksChange}
         onRepropose={onRepropose}
         groups={groups}
+        selectable={selectable}
       >
         {groups?.proposed && (
           <GroupsBanner

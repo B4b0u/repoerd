@@ -11,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../../../shared/ui/select'
-import { applyEdits, type GroupEdit, newGroup, placeEdits } from './edits'
+import { newGroupEdits } from './edits'
 import { groupColors } from './group-colors'
 import { isPlacedByHand, useGroupEditing } from './group-editing'
 import { useGroupsTranslation } from './groups-i18n'
@@ -21,7 +21,8 @@ const NONE = 'none'
 const NEW = 'new'
 const GROUP = 'group:'
 
-function Swatch({ color }: { color: string }) {
+/** The colour dot of a group, beside its name (never alone). */
+export function GroupSwatch({ color }: { color: string }) {
   const { theme } = useThemeContext()
   return (
     <span
@@ -66,7 +67,7 @@ export function GroupSelect({ table }: { table: string }) {
         <span className="text-muted-foreground">{label}</span>
         {current ? (
           <>
-            <Swatch color={current.color} />
+            <GroupSwatch color={current.color} />
             <span className="min-w-0 truncate" title={current.name}>
               {current.name}
             </span>
@@ -100,14 +101,9 @@ export function GroupSelect({ table }: { table: string }) {
     event.preventDefault()
     if (name === '') return
     setCreating(false)
-    // One gesture: the group is created, then the table placed in it (one notice, one undo).
-    void edits.run(
-      (saved) => {
-        const save: GroupEdit = { kind: 'saveGroup', group: newGroup(saved.groups, name) }
-        return [save, ...placeEdits(schema, applyEdits(saved, [save]), [table], save.group.id)]
-      },
-      { undoLabel: t('notices.placed', { count: 1, name }) },
-    )
+    void edits.run((saved) => newGroupEdits(schema, saved, name, [table]), {
+      undoLabel: t('notices.placed', { count: 1, name }),
+    })
   }
 
   return (
@@ -131,7 +127,7 @@ export function GroupSelect({ table }: { table: string }) {
             )}
             {view.groups.map((group) => (
               <SelectItem key={group.id} value={`${GROUP}${group.id}`}>
-                <Swatch color={group.color} />
+                <GroupSwatch color={group.color} />
                 <span className="truncate">{group.name}</span>
               </SelectItem>
             ))}
