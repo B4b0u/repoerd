@@ -23,6 +23,10 @@ export type PatchedLiamSchema = Omit<Schema, 'tables'> & {
   tables: Record<string, PatchedLiamTable>
   /** Views the source declares: counted, never turned into tables. */
   ignoredViews?: number
+  /** Drizzle: the SWC `span.start` of the variable declarator of each table, keyed like `tables`. */
+  declarationSpans?: Record<string, number>
+  /** Drizzle: the SWC `span.start` of the module, the reference of `declarationSpans`. */
+  moduleSpanStart?: number
 }
 
 /**
