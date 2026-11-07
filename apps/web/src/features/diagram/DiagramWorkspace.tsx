@@ -84,14 +84,19 @@ function Workspace({
   const { t } = useTranslation('compare')
   // Loading or failed: no groups, the diagram shows as usual (its first placement waits for them).
   const groupsQuery = useTableGroups(repo, sourceId)
+  // Proposals shown again over the saved groups: local, and only for the source it was asked on.
+  const [reproposedFor, setReproposedFor] = useState<string>()
+  const reproposed = reproposedFor === sourceId
   const groups = useMemo(
     () =>
       buildGroupView(schema, groupsQuery.data, {
         proposalSchema,
         loading: groupsQuery.isPending,
+        reproposed,
       }),
-    [schema, groupsQuery.data, proposalSchema, groupsQuery.isPending],
+    [schema, groupsQuery.data, proposalSchema, groupsQuery.isPending, reproposed],
   )
+  const canRepropose = groupsQuery.data?.configured === true && groups.canEdit && !reproposed
   const changedOnly = viewState.changed === true
   // Leaving the related view remounts the full canvas: it centres the table once placed.
   const [centerAfterRemount, setCenterAfterRemount] = useState<string>()
@@ -263,6 +268,8 @@ function Workspace({
             hubLinks={viewState.hubLinks}
             onHubLinksChange={changeHubLinks}
             groups={groups}
+            onRepropose={canRepropose ? () => setReproposedFor(sourceId) : undefined}
+            onLeaveReproposal={() => setReproposedFor(undefined)}
           />
         )}
       </div>

@@ -3,6 +3,14 @@ import type { GroupsCatalog } from '../en/groups'
 export const groups: GroupsCatalog = {
   proposed_one: "{{count}} groupe proposé d'après les fichiers du schéma",
   proposed_other: "{{count}} groupes proposés d'après les fichiers du schéma",
+  saveForTeam: "Enregistrer pour l'équipe",
+  ignoreForTeam: "Ignorer pour l'équipe",
+  replaceForTeam: "Remplacer pour l'équipe",
+  cancelProposal: 'Annuler',
+  repropose: "Proposer à nouveau d'après les fichiers",
+  reproposeHint:
+    "Afficher les groupes proposés d'après les fichiers du schéma à la place de ceux enregistrés",
+  replaced: 'Groupes remplacés par les propositions.',
   tag: 'Groupe : {{name}}',
   ungrouped: 'Hors groupe',
   showGroup: 'Afficher le groupe {{name}}',

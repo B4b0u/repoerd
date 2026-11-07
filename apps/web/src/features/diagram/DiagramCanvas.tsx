@@ -57,6 +57,10 @@ interface Props {
   hubLinks?: 'none' | 'first'
   onHubLinksChange?: (hubLinks: 'none' | 'first' | undefined) => void
   groups?: GroupView
+  /** Shows the groups proposed from the files again (omitted when it makes no sense). */
+  onRepropose?: () => void
+  /** The proposals shown again are over: back to the saved groups. */
+  onLeaveReproposal?: () => void
 }
 
 const LAYOUT_TOAST_ID = 'layout-save-failed'
@@ -104,6 +108,8 @@ export function DiagramCanvas({
   hubLinks,
   onHubLinksChange,
   groups,
+  onRepropose,
+  onLeaveReproposal = () => {},
 }: Props) {
   const layout = useLayout(repo, sourceId, mode, inheritLayout)
   const [nodes, setNodes, onNodesChange] = useNodesState<TableFlowNode>([])
@@ -290,9 +296,18 @@ export function DiagramCanvas({
         hubs={hubs}
         hubLinks={hubLinks}
         onHubLinksChange={onHubLinksChange}
+        onRepropose={onRepropose}
         groups={groups}
       >
-        {groups?.proposed && <GroupsBanner count={groups.groups.length} />}
+        {groups?.proposed && (
+          <GroupsBanner
+            repo={repo}
+            sourceId={sourceId}
+            schema={schema}
+            view={groups}
+            onLeaveReproposal={onLeaveReproposal}
+          />
+        )}
       </FlowCanvas>
       <AlertDialog open={confirmingRearrange} onOpenChange={setConfirmingRearrange}>
         <AlertDialogContent>

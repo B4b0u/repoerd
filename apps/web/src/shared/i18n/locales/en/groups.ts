@@ -7,6 +7,13 @@ import type { TableGroupsProblem } from '@repoerd/model'
 export const groups = {
   proposed_one: '{{count}} group proposed from the schema files',
   proposed_other: '{{count}} groups proposed from the schema files',
+  saveForTeam: 'Save for the team',
+  ignoreForTeam: 'Ignore for the team',
+  replaceForTeam: 'Replace for the team',
+  cancelProposal: 'Cancel',
+  repropose: 'Propose again from the files',
+  reproposeHint: 'Show the groups proposed from the schema files instead of the saved ones',
+  replaced: 'Groups replaced by the proposals.',
   tag: 'Group: {{name}}',
   ungrouped: 'Ungrouped',
   showGroup: 'Show the group {{name}}',

@@ -48,6 +48,7 @@ const MEMBERSHIP = new Map<string, string | null>([
 ])
 const view = (loading: boolean): GroupView => ({
   proposed: false,
+  reproposed: false,
   groups: loading ? [] : [{ id: 'g1', name: 'Core', color: '#123456', origins: [] }],
   membership: loading
     ? new Map<string, string | null>([

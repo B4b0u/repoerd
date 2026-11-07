@@ -26,6 +26,7 @@ const schema: DbSchema = {
 }
 const groups: GroupView = {
   proposed: false,
+  reproposed: false,
   canEdit: false,
   loading: false,
   groups: [

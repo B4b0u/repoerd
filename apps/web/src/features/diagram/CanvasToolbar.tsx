@@ -1,6 +1,6 @@
 import { DISPLAY_MODES, type DisplayMode, isDisplayMode } from '@repoerd/model'
 import { Panel, useReactFlow, useViewport } from '@xyflow/react'
-import { LayoutGrid, Maximize, Minus, Plus } from 'lucide-react'
+import { LayoutGrid, Maximize, Minus, Plus, RefreshCw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { formatPercent } from '../../shared/i18n/format'
 import { toLanguage } from '../../shared/i18n/i18n'
@@ -15,6 +15,7 @@ import {
 } from '../../shared/ui/select'
 import { Separator } from '../../shared/ui/separator'
 import { Tabs, TabsList, TabsTrigger } from '../../shared/ui/tabs'
+import { useGroupsTranslation } from './groups/groups-i18n'
 import type { HubLinksMode } from './hubs'
 
 interface Props {
@@ -22,6 +23,8 @@ interface Props {
   onModeChange: (mode: DisplayMode) => void
   /** Omitted where the layout cannot be rearranged (related-tables view). */
   onRearrange?: () => void
+  /** Shows the groups proposed from the files again; omitted without the right to edit them. */
+  onRepropose?: () => void
   /** Resolved hub tables; the selector is shown only when this is non-empty. */
   hubs?: readonly string[]
   hubLinks?: Exclude<HubLinksMode, 'all'>
@@ -33,11 +36,13 @@ export function CanvasToolbar({
   mode,
   onModeChange,
   onRearrange,
+  onRepropose,
   hubs,
   hubLinks,
   onHubLinksChange,
 }: Props) {
   const { t, i18n } = useTranslation('diagram')
+  const { t: tGroups } = useGroupsTranslation()
   const { zoomIn, zoomOut, fitView } = useReactFlow()
   const { zoom } = useViewport()
   return (
@@ -64,6 +69,15 @@ export function CanvasToolbar({
       {onRearrange && (
         <IconButton label={t('canvas.rearrange')} onClick={onRearrange}>
           <LayoutGrid />
+        </IconButton>
+      )}
+      {onRepropose && (
+        <IconButton
+          label={tGroups('repropose')}
+          title={tGroups('reproposeHint')}
+          onClick={onRepropose}
+        >
+          <RefreshCw />
         </IconButton>
       )}
       <Separator orientation="vertical" className="mx-1 data-[orientation=vertical]:h-5" />

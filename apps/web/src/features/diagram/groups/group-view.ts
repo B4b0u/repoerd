@@ -2,8 +2,10 @@ import type { TableGroupsResponse } from '@repoerd/contracts'
 import { type DbSchema, proposeGroups, resolveTableGroups, type TableGroup } from '@repoerd/model'
 
 export interface GroupView {
-  /** True when nothing is saved for the source: the groups are proposals (dashed frames, banner). */
+  /** True when the groups are proposals (dashed frames, banner): nothing saved, or proposed again. */
   proposed: boolean
+  /** Proposals shown in place of saved groups, on this screen only, until the team's are replaced. */
+  reproposed: boolean
   groups: TableGroup[]
   /** Every table of the schema → its group id, or null (ungrouped). */
   membership: ReadonlyMap<string, string | null>
@@ -15,6 +17,8 @@ export interface GroupView {
 export interface GroupViewOptions {
   proposalSchema?: DbSchema
   loading?: boolean
+  /** Show the proposals even though groups are saved (a local, unsaved preview). */
+  reproposed?: boolean
 }
 
 /**
@@ -27,21 +31,24 @@ export interface GroupViewOptions {
 export function buildGroupView(
   schema: DbSchema,
   response: TableGroupsResponse | undefined,
-  { proposalSchema = schema, loading = false }: GroupViewOptions = {},
+  { proposalSchema = schema, loading = false, reproposed = false }: GroupViewOptions = {},
 ): GroupView {
   if (response === undefined) {
     return {
       proposed: false,
+      reproposed: false,
       groups: [],
       membership: resolveTableGroups(schema, { groups: [], assignments: {} }),
       canEdit: false,
       loading,
     }
   }
-  const groups = response.configured ? response.groups : proposeGroups(proposalSchema)
-  const assignments = response.configured ? response.assignments : {}
+  const showSaved = response.configured && !reproposed
+  const groups = showSaved ? response.groups : proposeGroups(proposalSchema)
+  const assignments = showSaved ? response.assignments : {}
   return {
-    proposed: !response.configured && groups.length > 0,
+    proposed: reproposed || (!response.configured && groups.length > 0),
+    reproposed: reproposed && response.configured,
     groups,
     membership: resolveTableGroups(schema, { groups, assignments }),
     canEdit: response.canEdit,

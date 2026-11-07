@@ -12,6 +12,7 @@ const box = (id: string, x: number, y: number): Box => ({ id, x, y, width: 200, 
 
 const viewOf = (membership: Record<string, string | null>): GroupView => ({
   proposed: false,
+  reproposed: false,
   groups: [{ id: 'g', name: 'G', color: '#000', origins: [] }],
   membership: new Map(Object.entries(membership)),
   canEdit: false,
