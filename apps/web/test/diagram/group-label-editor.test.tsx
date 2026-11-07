@@ -299,6 +299,26 @@ describe('the group label editor', () => {
     expect(server.sent[0]?.body).toEqual({ assignments: {}, clear: ['users'] })
   })
 
+  it('does not offer to follow its file to a table that has none', async () => {
+    const server = fakeGroupsServer(configured)
+    const { file: _, ...users } = schema.tables.users as Table
+    renderWithApp(
+      <DiagramWorkspace
+        repo={repo}
+        schema={{ ...schema, tables: { ...schema.tables, users } }}
+        sourceId="db"
+        viewState={{ hidden: [], mode: 'ALL_FIELDS', active: 'users' }}
+        updateView={vi.fn()}
+      />,
+      server.client,
+    )
+    const panel = within(await screen.findByRole('complementary', { name: 'Details of users' }))
+    const user = userEvent.setup()
+    await user.click(await panel.findByRole('combobox', { name: 'Group' }))
+    expect(await screen.findByRole('option', { name: 'Ungrouped' })).toBeTruthy()
+    expect(screen.queryByRole('option', { name: 'Follow its file' })).toBeNull()
+  })
+
   it('speaks French', async () => {
     await i18n.changeLanguage('fr')
     renderWorkspace()

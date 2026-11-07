@@ -75,6 +75,10 @@ export function GroupSelect({ table }: { table: string }) {
         ) : (
           <span>{t('ungrouped')}</span>
         )}
+        {/* Proposals shown again: not the group the table is saved in. */}
+        {view.reproposed && (
+          <span className="shrink-0 text-xs text-muted-foreground">{t('detail.preview')}</span>
+        )}
       </p>
     )
   }
@@ -122,7 +126,7 @@ export function GroupSelect({ table }: { table: string }) {
               if (creating) event.preventDefault()
             }}
           >
-            {isPlacedByHand(editing, table) && (
+            {isPlacedByHand(editing, table) && schema.tables[table]?.file !== undefined && (
               <SelectItem value={ORIGIN}>{t('detail.followFile')}</SelectItem>
             )}
             {view.groups.map((group) => (

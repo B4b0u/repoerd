@@ -37,6 +37,8 @@ export const groups = {
   detail: {
     label: 'Group',
     followFile: 'Follow its file',
+    /** Beside the group of a table while the proposals are shown again over the saved ones. */
+    preview: '(preview, not saved)',
     newGroup: 'New group…',
     newName: 'Name of the new group',
     create: 'Create',

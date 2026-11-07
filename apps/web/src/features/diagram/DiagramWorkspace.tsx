@@ -99,6 +99,17 @@ function Workspace({
       }),
     [schema, groupsQuery.data, proposalSchema, groupsQuery.isPending, reproposed],
   )
+  // A preview of the proposals is only shown: layouts and the related view keep the saved groups.
+  const savedGroups = useMemo(
+    () =>
+      reproposed
+        ? buildGroupView(schema, groupsQuery.data, {
+            proposalSchema,
+            loading: groupsQuery.isPending,
+          })
+        : groups,
+    [reproposed, groups, schema, groupsQuery.data, proposalSchema, groupsQuery.isPending],
+  )
   // Back to the saved groups when the source changes (also on a later return to this source).
   // biome-ignore lint/correctness/useExhaustiveDependencies: runs on the source change only
   useEffect(() => setReproposedFor(undefined), [sourceId])
@@ -264,7 +275,7 @@ function Workspace({
               hubs={hubs}
               hubLinks={viewState.hubLinks}
               onHubLinksChange={changeHubLinks}
-              groups={groups}
+              groups={savedGroups}
             />
           ) : (
             <DiagramCanvas
@@ -286,6 +297,7 @@ function Workspace({
               hubLinks={viewState.hubLinks}
               onHubLinksChange={changeHubLinks}
               groups={groups}
+              layoutMembership={savedGroups.membership}
               onRepropose={canRepropose ? () => setReproposedFor(sourceId) : undefined}
               onLeaveReproposal={() => setReproposedFor(undefined)}
             />

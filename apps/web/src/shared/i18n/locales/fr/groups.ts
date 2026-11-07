@@ -31,6 +31,7 @@ export const groups: GroupsCatalog = {
   detail: {
     label: 'Groupe',
     followFile: "D'après son fichier",
+    preview: '(aperçu, non enregistré)',
     newGroup: 'Nouveau groupe…',
     newName: 'Nom du nouveau groupe',
     create: 'Créer',

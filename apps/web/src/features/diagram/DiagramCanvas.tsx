@@ -59,6 +59,11 @@ interface Props {
   hubLinks?: 'none' | 'first'
   onHubLinksChange?: (hubLinks: 'none' | 'first' | undefined) => void
   groups?: GroupView
+  /**
+   * The groups automatic placement lays the tables out by: the saved ones while proposals are
+   * previewed over them (`groups`' own by default).
+   */
+  layoutMembership?: ReadonlyMap<string, string | null>
   /** Shows the groups proposed from the files again (omitted when it makes no sense). */
   onRepropose?: () => void
   /** The proposals shown again are over: back to the saved groups. */
@@ -110,6 +115,7 @@ export function DiagramCanvas({
   hubLinks,
   onHubLinksChange,
   groups,
+  layoutMembership,
   onRepropose,
   onLeaveReproposal = () => {},
 }: Props) {
@@ -208,7 +214,7 @@ export function DiagramCanvas({
   // dragged since (pending drags may not be saved yet). A first visit is laid out group by group:
   // the placement waits for the groups (and goes without them if they fail to load).
   const placed = useRef(false)
-  const membership = groups?.membership
+  const membership = layoutMembership ?? groups?.membership
   const groupsLoading = groups?.loading === true
   useEffect(() => {
     if (!layout.data || placed.current || groupsLoading) return
