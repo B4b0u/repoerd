@@ -142,7 +142,7 @@ export const notes = pgTable('notes', { ...base, body: text('body'), ...unknownH
     ])
   })
 
-  it('follows a spread cycle and a self-spread once, and ignores spread calls', async () => {
+  it('follows a spread cycle and a self-spread once, and ignores spread calls of unknown functions', async () => {
     const schema = await parseDrizzle(`
 const a = { aId: integer('a_id'), ...b }
 const b = { bId: integer('b_id'), ...a }
@@ -155,6 +155,90 @@ export const cycles = pgTable('cycles', { ...a, ...self, ...columnsOf(), id: int
       'self_id',
       'id',
     ])
+  })
+
+  it('adds the columns returned by spread calls of top-level functions without parameters', async () => {
+    const schema = await parseDrizzle(`
+const tenant = () => ({ id: uuid('id').primaryKey(), orgId: uuid('org_id').notNull() })
+const owner = (): Record<string, unknown> => { return { ownerId: uuid('owner_id') } satisfies Record<string, unknown> }
+export function audit() { return { createdAt: timestamp('created_at') } as const }
+export const notes = pgTable('notes', { ...tenant(), ...owner(), ...audit(), body: text('body') })
+`)
+    const notes = schema.tables.notes
+    expect(Object.values(notes?.columns ?? {}).map((c) => c.name)).toEqual([
+      'id',
+      'org_id',
+      'owner_id',
+      'created_at',
+      'body',
+    ])
+    expect(notes?.columns.orgId?.notNull).toBe(true)
+    expect(notes?.constraints.PRIMARY_id).toMatchObject({
+      type: 'PRIMARY KEY',
+      columnNames: ['id'],
+    })
+  })
+
+  it('ignores spread calls with arguments, of functions with parameters or with other statements', async () => {
+    const schema = await parseDrizzle(`
+const keyed = (name) => ({ id: uuid(name).primaryKey() })
+const defaulted = (name = 'id') => ({ id: uuid(name).primaryKey() })
+const noArgs = () => ({ ref: uuid('ref') })
+const logged = () => { console.log('columns'); return { logged: text('logged') } }
+const later = async () => ({ later: text('later') })
+export const items = pgTable('items', { ...keyed('item_id'), ...defaulted(), ...noArgs(1), ...logged(), ...later(), body: text('body') })
+`)
+    expect(Object.values(schema.tables.items?.columns ?? {}).map((c) => c.name)).toEqual(['body'])
+  })
+
+  it('follows a cycle of spread calls once, and spreads inside a returned literal', async () => {
+    const schema = await parseDrizzle(`
+const timestamps = { createdAt: timestamp('created_at') }
+const f = () => ({ fId: integer('f_id'), ...g() })
+function g() { return { gId: integer('g_id'), ...f(), ...timestamps } }
+const self = () => ({ selfId: integer('self_id'), ...self() })
+export const cycles = pgTable('cycles', { ...f(), ...self(), ...timestamps, id: integer('id') })
+`)
+    expect(Object.values(schema.tables.cycles?.columns ?? {}).map((c) => c.name)).toEqual([
+      'f_id',
+      'g_id',
+      'created_at',
+      'self_id',
+      'id',
+    ])
+  })
+
+  it('keeps the primary and foreign keys on columns from a spread call', async () => {
+    const schema = await parseDrizzle(`
+export const orgs = pgTable('orgs', { id: uuid('id').primaryKey() })
+const tenant = () => ({ id: uuid('id').notNull(), orgId: uuid('org_id').notNull().references(() => orgs.id) })
+export const projects = pgTable('projects', { ...tenant(), name: text('name') }, (t) => [
+  primaryKey({ columns: [t.orgId, t.id] }),
+])
+export const tasks = pgTable('tasks', { ...tenant(), projectId: uuid('project_id').notNull() }, (t) => [
+  foreignKey({ name: 'tasks_project_fk', columns: [t.orgId, t.projectId], foreignColumns: [projects.orgId, projects.id] }),
+])
+`)
+    expect(schema.tables.projects?.constraints.projects_pkey).toMatchObject({
+      type: 'PRIMARY KEY',
+      columnNames: ['org_id', 'id'],
+    })
+    expect(Object.values(schema.tables.tasks?.constraints ?? {})).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'FOREIGN KEY',
+          columnNames: ['org_id'],
+          targetTableName: 'orgs',
+        }),
+        expect.objectContaining({
+          type: 'FOREIGN KEY',
+          name: 'tasks_project_fk',
+          columnNames: ['org_id', 'project_id'],
+          targetTableName: 'projects',
+          targetColumnNames: ['org_id', 'id'],
+        }),
+      ]),
+    )
   })
 
   it('expands an object literal declared after the table', async () => {
@@ -256,6 +340,15 @@ export const values = pgTable('values', { x: later('x') })
 export const later = customType({ dataType() { return 'real' } })
 `)
     expect(schema.tables.values?.columns.x).toMatchObject({ name: 'x', type: 'real' })
+  })
+
+  it('uses the dataType literal of a customType column from a spread call', async () => {
+    const schema = await parseDrizzle(`
+const citext = customType({ dataType() { return 'citext' } })
+const contact = () => ({ email: citext('email').notNull() })
+export const people = pgTable('people', { id: uuid('id').primaryKey(), ...contact() })
+`)
+    expect(schema.tables.people?.columns.email).toMatchObject({ name: 'email', type: 'citext' })
   })
 
   it('keeps the variable name when dataType is not a string literal', async () => {

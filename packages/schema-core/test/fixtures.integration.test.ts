@@ -261,6 +261,23 @@ describe('showcase acme/helpdesk (Drizzle)', () => {
       'created_at',
       'updated_at',
     ])
+    // Spread calls of local helpers: `...tenantKey()` (arrow function) and `...authorship()`
+    // (function declaration, itself spreading `timestamps`).
+    expect(tables.macros?.columns.map((c) => c.name)).toEqual([
+      'id',
+      'organization_id',
+      'title',
+      'body',
+      'created_by_id',
+      'created_at',
+      'updated_at',
+    ])
+    expect(tables.macros?.columns.filter((c) => c.isPrimaryKey).map((c) => c.name)).toEqual(['id'])
+    expect(tables.tags?.constraints).toContainEqual({
+      kind: 'unique',
+      name: 'tags_org_name_unique',
+      columns: ['organization_id', 'name'],
+    })
     expect(tables.members?.columns.filter((c) => c.isPrimaryKey).map((c) => c.name)).toEqual([
       'organization_id',
       'user_id',

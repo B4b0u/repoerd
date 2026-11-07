@@ -19,6 +19,22 @@ import { channel, ticketPriority, ticketStatus } from './enums'
 import { members, organizations, teams, users } from './organizations'
 import { slaPolicies } from './sla'
 
+/** The key of the rows an organization owns. */
+const tenantKey = () => ({
+  id: uuid().primaryKey().defaultRandom(),
+  organizationId: uuid()
+    .notNull()
+    .references(() => organizations.id, { onDelete: 'cascade' }),
+})
+
+/** Who wrote a row, and when it was created and last changed. */
+function authorship() {
+  return {
+    createdById: uuid().references(() => users.id, { onDelete: 'set null' }),
+    ...timestamps,
+  }
+}
+
 export const tickets = pgTable(
   'tickets',
   {
@@ -88,10 +104,7 @@ export const attachments = pgTable('attachments', {
 export const tags = pgTable(
   'tags',
   {
-    id: uuid().primaryKey().defaultRandom(),
-    organizationId: uuid()
-      .notNull()
-      .references(() => organizations.id, { onDelete: 'cascade' }),
+    ...tenantKey(),
     name: text().notNull(),
   },
   (t) => [unique('tags_org_name_unique').on(t.organizationId, t.name)],
@@ -112,14 +125,10 @@ export const ticketTags = pgTable(
 
 /** Canned replies agents insert into messages. */
 export const macros = pgTable('macros', {
-  id: uuid().primaryKey().defaultRandom(),
-  organizationId: uuid()
-    .notNull()
-    .references(() => organizations.id, { onDelete: 'cascade' }),
+  ...tenantKey(),
   title: text().notNull(),
   body: text().notNull(),
-  createdById: uuid().references(() => users.id, { onDelete: 'set null' }),
-  ...timestamps,
+  ...authorship(),
 })
 
 export const satisfactionRatings = pgTable('satisfaction_ratings', {
