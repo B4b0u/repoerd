@@ -12,6 +12,7 @@ import { makeReplaceApp } from '../../src/application/use-cases/replace-app.js'
 import { makeRepoAccess } from '../../src/application/use-cases/repo-access.js'
 import { makeRepoSettings } from '../../src/application/use-cases/repo-settings.js'
 import { makeSetup } from '../../src/application/use-cases/setup.js'
+import { makeTableGroups } from '../../src/application/use-cases/table-groups.js'
 import {
   createRateLimiter,
   type RateLimiter,
@@ -30,6 +31,7 @@ import {
   InMemoryRepoSettings,
   InMemorySchemaCache,
   InMemorySessionRepository,
+  InMemoryTableGroups,
   InMemoryUserRepository,
 } from '../fakes/in-memory-stores.js'
 import { StubSchemaToolkit } from '../fakes/stub-schema-toolkit.js'
@@ -76,6 +78,7 @@ function common(
   const directory = new InMemoryRepoDirectory([accessible('acme', 'shop', true)])
   const layouts = new InMemoryLayoutRepository()
   const settings = new InMemoryRepoSettings()
+  const tableGroups = new InMemoryTableGroups()
   const logged: object[] = []
   const warned: object[] = []
   const commitSchemas = makeCommitSchemas({
@@ -93,6 +96,7 @@ function common(
     getLayout: makeGetLayout({ layouts }),
     saveTablePositions: makeSaveTablePositions({ layouts }),
     repoSettings: makeRepoSettings({ settings }),
+    tableGroups: makeTableGroups({ groups: tableGroups }),
     admin: makeAdmin({ config, users, directory, sessions, now }),
     logger: {
       error: (details) => logged.push(details),
@@ -102,13 +106,13 @@ function common(
     checkDatabase: options.checkDatabase ?? (() => {}),
     webDistPath: options.webDistPath ?? null,
   }
-  return { deps, directory, logged, warned, settings }
+  return { deps, directory, logged, warned, settings, tableGroups }
 }
 
 export function buildFakeModeApp(options: Options = {}) {
   const users = new InMemoryUserRepository()
   users.users.set('fake-user', { id: 'fake-user', login: 'dev', avatarUrl: null, isAdmin: true })
-  const { deps, directory, logged, warned, settings } = common(
+  const { deps, directory, logged, warned, settings, tableGroups } = common(
     new InMemoryInstanceConfig(),
     users,
     new InMemorySessionRepository(),
@@ -120,7 +124,7 @@ export function buildFakeModeApp(options: Options = {}) {
     mode: 'fake',
     fakeUser: { id: 'fake-user', login: 'dev', avatarUrl: null, isAdmin: true },
   })
-  return { app, directory, logged, warned, settings, users }
+  return { app, directory, logged, warned, settings, tableGroups, users }
 }
 
 /** Real mode with in-memory stores. `ready: false` starts from a fresh, unconfigured instance. */
@@ -136,7 +140,7 @@ export function buildRealModeApp(options: Options & { ready?: boolean } = {}) {
     config.config = { ...config.config, publicUrl: 'https://erd.example.com', app: FAKE_APP }
     users.users.set('admin', { id: 'admin', login: 'admin', avatarUrl: null, isAdmin: true })
   }
-  const { deps, directory, logged, warned, settings } = common(
+  const { deps, directory, logged, warned, settings, tableGroups } = common(
     config,
     users,
     sessions,
@@ -192,6 +196,7 @@ export function buildRealModeApp(options: Options & { ready?: boolean } = {}) {
     registrar,
     directory,
     settings,
+    tableGroups,
     setup,
     logged,
     warned,

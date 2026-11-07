@@ -87,7 +87,7 @@ export function App() {
             </Suspense>
           </PageErrorBoundary>
         </AppGate>
-        <Toaster position="top-right" offset={60} />
+        <Toaster position="top-right" />
         <VersionBanner />
       </QueryClientProvider>
     </ThemeProvider>

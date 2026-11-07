@@ -9,11 +9,20 @@ import {
   type Table,
 } from '@repoerd/model'
 import type { Edge, Node } from '@xyflow/react'
+import type { GroupColors } from '../groups/group-colors'
 import { type NodeDiff, nodeDiff } from './diff-view'
 import { type Point, tableSize } from './dimensions'
 import { foreignKeyColumns, visibleColumns } from './display-mode'
 
 export type NodeHighlight = 'none' | 'active' | 'related' | 'dimmed'
+
+/** The table's group, as its card shows it. */
+export interface NodeGroup {
+  name: string
+  colors: { dark: GroupColors; light: GroupColors }
+  /** Outside any frame of its group (far from it, or no frames drawn): the card names the group. */
+  far: boolean
+}
 
 export type TableNodeData = {
   table: Table
@@ -26,6 +35,7 @@ export type TableNodeData = {
   diff?: NodeDiff
   /** Referencing columns whose hub edge is hidden: hub table name to show as a badge. */
   hubBadges?: Readonly<Record<string, string>>
+  group?: NodeGroup
 }
 export type TableFlowNode = Node<TableNodeData, 'table'>
 export type RelationshipEdgeData = {
@@ -71,6 +81,9 @@ export function buildFlow(
         height: size.height,
         // React Flow's English "node" role description: the card's own text names it.
         domAttributes: { 'aria-roledescription': undefined },
+        // A Shift press on a card never starts React Flow's selection box (only the empty canvas
+        // does), so a Shift+click that moves a little still adds or removes the card.
+        className: 'nokey',
         data: {
           table,
           columns: visibleColumns(table, mode),

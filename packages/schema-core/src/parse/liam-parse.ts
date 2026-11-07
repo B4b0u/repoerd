@@ -1,4 +1,5 @@
 import type { SchemaFormat } from '@repoerd/model'
+import { drizzleDeclarationLines } from './declaration-lines.js'
 import type { PatchedLiamSchema } from './liam-patch.js'
 import { preparePrismaSchema, restoreLineNumbers } from './prepare-prisma.js'
 import { stripAnsi } from './strip-ansi.js'
@@ -7,6 +8,8 @@ import { stripAnsi } from './strip-ansi.js'
 export interface LiamParseValue {
   schema: PatchedLiamSchema
   errors: string[]
+  /** Table key to the 0-based line declaring it (empty when the parser does not tell). */
+  declarationLines: Record<string, number>
 }
 
 /**
@@ -19,7 +22,16 @@ export async function parseWithLiam(input: string, format: SchemaFormat): Promis
   const { parse } = await import('@liam-hq/schema/parser')
   if (format === 'drizzle') {
     const result = await parse(input, 'drizzle')
-    return { schema: result.value, errors: result.errors.map((error) => error.message) }
+    const schema: PatchedLiamSchema = result.value
+    const { declarationSpans, moduleSpanStart } = schema
+    return {
+      schema,
+      errors: result.errors.map((error) => error.message),
+      declarationLines:
+        declarationSpans && moduleSpanStart !== undefined
+          ? drizzleDeclarationLines(input, moduleSpanStart, declarationSpans)
+          : {},
+    }
   }
   const prepared = preparePrismaSchema(input)
   const result = await parse(prepared.text, 'prisma').catch((error: unknown) => {
@@ -36,5 +48,6 @@ export async function parseWithLiam(input: string, format: SchemaFormat): Promis
     errors: result.errors.map((error) =>
       restoreLineNumbers(stripAnsi(error.message), prepared.injectedLines),
     ),
+    declarationLines: prepared.tableLines,
   }
 }

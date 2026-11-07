@@ -1,4 +1,13 @@
-import type { DbSchema, DetectedSource, ManualSource, TablePosition } from '@repoerd/model'
+import {
+  type DbSchema,
+  type DetectedSource,
+  type ManualSource,
+  originKey,
+  TABLE_GROUP_LIMITS,
+  type TableGroup,
+  type TableGroupConfig,
+  type TablePosition,
+} from '@repoerd/model'
 import type { BlobCache } from '../../src/application/ports/blob-cache.js'
 import {
   EMPTY_INSTANCE_CONFIG,
@@ -15,6 +24,10 @@ import type {
   SessionRepository,
   StoredSession,
 } from '../../src/application/ports/session-repository.js'
+import type {
+  StoredTableGroups,
+  TableGroupRepository,
+} from '../../src/application/ports/table-groups.js'
 import type {
   AppUser,
   UserProfile,
@@ -70,6 +83,79 @@ export class InMemoryRepoSettings implements RepoSettingsRepository {
   async save(repo: KnownRepo, sources: ManualSource[], _updatedBy: string) {
     if (sources.length === 0) this.settings.delete(repoKey(repo))
     else this.settings.set(repoKey(repo), sources)
+  }
+}
+
+export class InMemoryTableGroups implements TableGroupRepository {
+  readonly stored = new Map<string, TableGroupConfig>()
+  private key = (repo: KnownRepo, sourceId: string) => `${repoKey(repo)}|${sourceId}`
+
+  async get(repo: KnownRepo, sourceId: string): Promise<StoredTableGroups> {
+    const config = this.stored.get(this.key(repo, sourceId))
+    return config
+      ? { configured: true, config: structuredClone(config) }
+      : { configured: false, config: { groups: [], assignments: {} } }
+  }
+  private capReached(repo: KnownRepo, sourceId: string): boolean {
+    if (this.stored.has(this.key(repo, sourceId))) return false
+    const prefix = `${repoKey(repo)}|`
+    const used = [...this.stored.keys()].filter((k) => k.startsWith(prefix)).length
+    return used >= TABLE_GROUP_LIMITS.sources
+  }
+  async replace(repo: KnownRepo, sourceId: string, config: TableGroupConfig, _userId: string) {
+    if (this.capReached(repo, sourceId))
+      return { ok: false as const, error: 'too-many-sources' as const }
+    this.stored.set(this.key(repo, sourceId), structuredClone(config))
+    return { ok: true as const }
+  }
+  async saveGroup(repo: KnownRepo, sourceId: string, group: TableGroup, _userId: string) {
+    if (this.capReached(repo, sourceId))
+      return { ok: false as const, error: 'too-many-sources' as const }
+    const config = (await this.get(repo, sourceId)).config
+    const at = config.groups.findIndex((g) => g.id === group.id)
+    if (at >= 0) config.groups[at] = group
+    else if (config.groups.length >= TABLE_GROUP_LIMITS.groups)
+      return { ok: false as const, error: 'too-many-groups' as const }
+    else config.groups.push(group)
+    const taken = new Set(group.origins.map(originKey))
+    for (const other of config.groups) {
+      if (other.id !== group.id)
+        other.origins = other.origins.filter((o) => !taken.has(originKey(o)))
+    }
+    this.stored.set(this.key(repo, sourceId), config)
+    return { ok: true as const }
+  }
+  async deleteGroup(repo: KnownRepo, sourceId: string, groupId: string, _userId: string) {
+    const config = (await this.get(repo, sourceId)).config
+    if (!config.groups.some((g) => g.id === groupId)) return
+    config.groups = config.groups.filter((g) => g.id !== groupId)
+    for (const [table, id] of Object.entries(config.assignments)) {
+      if (id === groupId) delete config.assignments[table]
+    }
+    this.stored.set(this.key(repo, sourceId), config)
+  }
+  async place(
+    repo: KnownRepo,
+    sourceId: string,
+    assignments: Record<string, string | null>,
+    _userId: string,
+    clear: string[] = [],
+  ) {
+    if (Object.keys(assignments).length === 0 && clear.length === 0) return { ok: true as const }
+    if (this.capReached(repo, sourceId))
+      return { ok: false as const, error: 'too-many-sources' as const }
+    const config = (await this.get(repo, sourceId)).config
+    const known = new Set(config.groups.map((g) => g.id))
+    if (Object.values(assignments).some((id) => id !== null && !known.has(id))) {
+      return { ok: false as const, error: 'unknown-group' as const }
+    }
+    const next = { ...config.assignments, ...assignments }
+    for (const table of clear) delete next[table]
+    if (Object.keys(next).length > TABLE_GROUP_LIMITS.assignments)
+      return { ok: false as const, error: 'too-many-assignments' as const }
+    config.assignments = next
+    this.stored.set(this.key(repo, sourceId), config)
+    return { ok: true as const }
   }
 }
 

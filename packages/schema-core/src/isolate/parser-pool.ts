@@ -27,7 +27,13 @@ export interface SourceAnalyzer {
 }
 
 export type LiamParseOutcome =
-  | { kind: 'parsed'; schema: PatchedLiamSchema; errors: string[] }
+  | {
+      kind: 'parsed'
+      schema: PatchedLiamSchema
+      errors: string[]
+      /** Liam table key -> 0-based line of its declaration in the parsed input. */
+      declarationLines: Record<string, number>
+    }
   /** Liam threw: its message. */
   | { kind: 'failed'; message: string }
   /** The child process died during the parse (native crash, out of memory). */
@@ -291,7 +297,12 @@ export function createParserPool(options: ParserPoolOptions = {}): ParserPool {
     async parse(input, format, timeoutMs = DEFAULT_CALL_TIMEOUT_MS) {
       const outcome = await call({ id: ++nextId, op: 'parse', input, format }, timeoutMs)
       return outcome.kind === 'done'
-        ? { kind: 'parsed', schema: outcome.value.schema, errors: outcome.value.errors }
+        ? {
+            kind: 'parsed',
+            schema: outcome.value.schema,
+            errors: outcome.value.errors,
+            declarationLines: outcome.value.declarationLines,
+          }
         : outcome
     },
     close() {

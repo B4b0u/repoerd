@@ -13,6 +13,8 @@ import { type PatchedLiamSchema, qualifiedTableName } from './liam-patch.js'
 export interface ToDbSchemaOptions {
   /** drizzle.config `casing`: renames the columns declared without a name (`firstName: text()`). */
   casing?: DrizzleCasing
+  /** Liam table key -> repo-relative path of the file that declares it. */
+  declarationFiles?: ReadonlyMap<string, string>
 }
 
 /** Column renames of one table: old name → new name. */
@@ -106,6 +108,7 @@ export function toDbSchema(liam: PatchedLiamSchema, options: ToDbSchemaOptions =
       ...indexes.flatMap((i) => (i.unique && i.columns.length === 1 ? i.columns : [])),
     ])
 
+    const file = options.declarationFiles?.get(key)
     tables.set(name, {
       name,
       schema,
@@ -125,6 +128,7 @@ export function toDbSchema(liam: PatchedLiamSchema, options: ToDbSchemaOptions =
       }),
       indexes,
       constraints,
+      ...(file === undefined ? {} : { file }),
     })
   }
 

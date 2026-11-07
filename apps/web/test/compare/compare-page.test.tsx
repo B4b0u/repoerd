@@ -81,6 +81,8 @@ function renderPage(path: string, compare: () => Response = () => Response.json(
     vi.fn(async (url: string) => {
       const requested = String(url)
       if (requested.includes('/compare')) return compare()
+      if (requested.includes('/groups'))
+        return Response.json({ configured: false, groups: [], assignments: {}, canEdit: false })
       // The canvas waits for the layout: these tests look at everything around it.
       if (requested.includes('/layout')) return new Promise<Response>(() => {})
       if (requested.includes('/schema')) return Response.json(NO_SCHEMA)
@@ -240,5 +242,40 @@ describe('Comparing branches', () => {
     ).toBe('/acme/shop?branch=main')
     await user.click(screen.getByRole('button', { name: 'Compare directly' }))
     expect(window.location.search).toContain('diff=direct')
+  })
+
+  it('proposes the groups of the compared branch only', async () => {
+    const user = userEvent.setup()
+    const inFile = (file: string, name: string) => ({ ...tableOf(name, ['id']), file })
+    renderPage('/acme/shop?branch=feature%2Fx&compare=main', () =>
+      Response.json(
+        comparison({
+          before: {
+            commitSha: 'ccccccc3333',
+            commitUrl: null,
+            // A file the compared branch deleted: no group comes from it.
+            schema: schemaOf(inFile('db/archive.ts', 'legacy'), inFile('db/users.ts', 'users')),
+            failure: null,
+          },
+          after: {
+            commitSha: 'bbbbbbb2222',
+            commitUrl: null,
+            schema: schemaOf(inFile('db/users.ts', 'users'), inFile('db/reviews.ts', 'reviews')),
+            failure: null,
+          },
+        }),
+      ),
+    )
+    await user.click(await screen.findByRole('tab', { name: 'Tables' }))
+    const tables = within(screen.getByRole('tabpanel', { name: 'Tables' }))
+    await vi.waitFor(() => expect(tables.getAllByRole('heading', { level: 3 })).toHaveLength(3))
+    expect(tables.getAllByRole('heading', { level: 3 }).map((h) => h.textContent)).toEqual([
+      'reviews1',
+      'users1',
+      'Ungrouped1',
+    ])
+    expect(
+      within(tables.getByRole('region', { name: 'Ungrouped' })).getByText('legacy'),
+    ).toBeTruthy()
   })
 })

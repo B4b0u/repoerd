@@ -19,7 +19,12 @@ import {
 } from '../../shared/ui/alert-dialog'
 import { PageMessage } from '../../shared/ui/PageMessage'
 import { type SaveOutcome, saveLayout, savePositions, trackLayoutSave, useLayout } from './api'
+import type { GroupToolbarActions } from './CanvasToolbar'
 import { FlowCanvas } from './FlowCanvas'
+import { GroupLayoutOffer, laidOutByGroup } from './groups/GroupLayoutOffer'
+import { GroupsBanner } from './groups/GroupsBanner'
+import { useGroupEditing } from './groups/group-editing'
+import type { GroupView } from './groups/group-view'
 import { layoutTables } from './layout/auto-layout'
 import { placeTables } from './layout/place-tables'
 import {
@@ -54,6 +59,16 @@ interface Props {
   hubs?: readonly string[]
   hubLinks?: 'none' | 'first'
   onHubLinksChange?: (hubLinks: 'none' | 'first' | undefined) => void
+  groups?: GroupView
+  /**
+   * The groups automatic placement lays the tables out by: the saved ones while proposals are
+   * previewed over them (`groups`' own by default).
+   */
+  layoutMembership?: ReadonlyMap<string, string | null>
+  /** The toolbar's group buttons ("Propose again", "Create a group"). */
+  groupActions?: GroupToolbarActions
+  /** The proposals shown again are over: back to the saved groups. */
+  onLeaveReproposal?: () => void
 }
 
 const LAYOUT_TOAST_ID = 'layout-save-failed'
@@ -100,6 +115,10 @@ export function DiagramCanvas({
   hubs,
   hubLinks,
   onHubLinksChange,
+  groups,
+  layoutMembership,
+  groupActions,
+  onLeaveReproposal = () => {},
 }: Props) {
   const layout = useLayout(repo, sourceId, mode, inheritLayout)
   const [nodes, setNodes, onNodesChange] = useNodesState<TableFlowNode>([])
@@ -112,6 +131,10 @@ export function DiagramCanvas({
   const { fitView } = useReactFlow()
   const apiMessage = useApiErrorMessage()
   const [placeError, setPlaceError] = useState<unknown>()
+  // Positions were saved for this diagram before this canvas placed its tables.
+  const [hadLayout, setHadLayout] = useState(false)
+  // Several tables can be selected and placed into a group together (editing commands only).
+  const selectable = useGroupEditing()?.editable === true
 
   // The notice's "Retry" needs the batcher, which needs this send: a ref closes the loop.
   const retryRef = useRef<() => void>(() => {})
@@ -189,15 +212,24 @@ export function DiagramCanvas({
   )
 
   // Tables are placed once per mount: a later layout refetch must not move tables the user has
-  // dragged since (pending drags may not be saved yet).
+  // dragged since (pending drags may not be saved yet). A first visit is laid out group by group:
+  // the placement waits for the groups (and goes without them if they fail to load).
   const placed = useRef(false)
+  const membership = layoutMembership ?? groups?.membership
+  const groupsLoading = groups?.loading === true
   useEffect(() => {
-    if (!layout.data || placed.current) return
+    if (!layout.data || placed.current || groupsLoading) return
     let cancelled = false
-    placeTables(schema, layout.data.positions, mode).then(
+    const hasSavedPositions = layout.data.positions.length > 0
+    placeTables(schema, layout.data.positions, mode, membership).then(
       ({ positions, added }) => {
         if (cancelled) return
         placed.current = true
+        setHadLayout(hasSavedPositions)
+        // Every table placed group by group: no layout of the user's to offer to rearrange.
+        if (!hasSavedPositions && [...(membership?.values() ?? [])].some((id) => id !== null)) {
+          laidOutByGroup(repo, sourceId)
+        }
         show(positions)
         // Auto-placed tables are saved right away so they never move by themselves later.
         void batcher.addAll(savablePositions(added, diff))
@@ -209,7 +241,7 @@ export function DiagramCanvas({
     return () => {
       cancelled = true
     }
-  }, [layout.data, schema, mode, show, batcher, diff])
+  }, [layout.data, schema, mode, show, batcher, diff, membership, groupsLoading, repo, sourceId])
 
   const onNodeDragStop = useCallback(
     (_event: unknown, _node: TableFlowNode, dragged: TableFlowNode[]) => {
@@ -223,12 +255,18 @@ export function DiagramCanvas({
     },
     [batcher],
   )
+  const onTablesMoved = useCallback(
+    (moved: TablePosition[]) => {
+      for (const position of moved) batcher.add(position)
+    },
+    [batcher],
+  )
 
   const rearrangeAll = async () => {
     batcher.cancel() // pending drags must not overwrite the new layout
     let laidOut: Map<string, Point>
     try {
-      laidOut = await layoutTables(schema, Object.keys(schema.tables), mode)
+      laidOut = await layoutTables(schema, Object.keys(schema.tables), mode, membership)
     } catch (error) {
       toast.error(placementFailureMessage(t, error))
       return
@@ -273,6 +311,7 @@ export function DiagramCanvas({
         edges={edges}
         onNodesChange={onNodesChange}
         onNodeDragStop={onNodeDragStop}
+        onTablesMoved={onTablesMoved}
         active={active}
         hidden={hidden}
         onActivate={onActivate}
@@ -283,6 +322,31 @@ export function DiagramCanvas({
         hubs={hubs}
         hubLinks={hubLinks}
         onHubLinksChange={onHubLinksChange}
+        groupActions={groupActions}
+        groups={groups}
+        selectable={selectable}
+      >
+        {groups?.proposed && (
+          <GroupsBanner
+            repo={repo}
+            sourceId={sourceId}
+            schema={schema}
+            view={groups}
+            onLeaveReproposal={onLeaveReproposal}
+          />
+        )}
+      </FlowCanvas>
+      <GroupLayoutOffer
+        repo={repo}
+        sourceId={sourceId}
+        eligible={
+          hadLayout &&
+          groups !== undefined &&
+          !groups.loading &&
+          !groups.proposed &&
+          groups.groups.length > 0
+        }
+        onLayOut={() => setConfirmingRearrange(true)}
       />
       <AlertDialog open={confirmingRearrange} onOpenChange={setConfirmingRearrange}>
         <AlertDialogContent>

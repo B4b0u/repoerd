@@ -1,0 +1,79 @@
+import type { GroupsCatalog } from '../en/groups'
+
+export const groups: GroupsCatalog = {
+  proposed_one: "{{count}} groupe proposé d'après les fichiers du schéma",
+  proposed_other: "{{count}} groupes proposés d'après les fichiers du schéma",
+  saveForTeam: "Enregistrer pour l'équipe",
+  ignoreForTeam: "Ignorer pour l'équipe",
+  replaceForTeam: "Remplacer pour l'équipe",
+  cancelProposal: 'Annuler',
+  repropose: "Proposer à nouveau d'après les fichiers",
+  reproposeHint:
+    "Afficher les groupes proposés d'après les fichiers du schéma à la place de ceux enregistrés",
+  reproposeUnavailable:
+    'Rien à proposer : toutes les tables sont dans un seul fichier et un seul schéma Postgres. Créez les groupes à la main.',
+  replaced: 'Groupes remplacés par les propositions.',
+  alreadySaved: "Un membre de l'équipe a déjà enregistré les groupes.",
+  tag: 'Groupe : {{name}}',
+  ungrouped: 'Hors groupe',
+  showGroup: 'Afficher le groupe {{name}}',
+  collapseGroup: 'Replier le groupe {{name}}',
+  expandGroup: 'Déplier le groupe {{name}}',
+  undo: 'Annuler',
+  editor: {
+    open: 'Modifier le groupe {{name}}',
+    name: 'Nom',
+    rename: 'Renommer',
+    color: 'Couleur',
+    swatch: 'Couleur {{n}}',
+    custom: 'Couleur personnalisée',
+    delete: 'Supprimer le groupe',
+    deleteHint: 'Ses tables deviennent hors groupe.',
+  },
+  detail: {
+    label: 'Groupe',
+    followFile: "D'après son fichier",
+    preview: '(aperçu, non enregistré)',
+    newGroup: 'Nouveau groupe…',
+    newName: 'Nom du nouveau groupe',
+    create: 'Créer',
+    cancel: 'Annuler',
+  },
+  createGroup: {
+    open: 'Créer un groupe',
+    select:
+      'Sélectionnez ses tables : Maj+clic sur chacune, ou Maj+glisser pour en entourer plusieurs.',
+    name: 'Dans la barre qui apparaît, choisissez « Nouveau groupe… » et donnez-lui un nom.',
+    keyboard: "Au clavier : ouvrez le détail d'une table, puis Groupe → « Nouveau groupe… ».",
+  },
+  selection: {
+    toolbar: 'Tables sélectionnées',
+    count_one: '{{count}} table sélectionnée',
+    count_other: '{{count}} tables sélectionnées',
+    placeInto: 'Ranger dans…',
+    clear: 'Vider la sélection',
+  },
+  layoutOffer: {
+    message:
+      'Ce schéma a des groupes de tables : votre diagramme peut être rangé groupe par groupe.',
+    accept: 'Ranger mon diagramme par groupe',
+    decline: 'Non merci',
+  },
+  notices: {
+    deleted: 'Groupe « {{name}} » supprimé.',
+    placed_one: '{{count}} table rangée dans « {{name}} ».',
+    placed_other: '{{count}} tables rangées dans « {{name}} ».',
+    ungrouped_one: '{{count}} table sortie de son groupe.',
+    ungrouped_other: '{{count}} tables sorties de leur groupe.',
+    followFile_one: '{{count}} table suit de nouveau son fichier.',
+    followFile_other: '{{count}} tables suivent de nouveau leur fichier.',
+  },
+  problems: {
+    'unknown-group': "Ce groupe n'existe plus : quelqu'un l'a peut-être supprimé entre-temps.",
+    'too-many-groups': 'Au plus {{max}} groupes par source de schéma.',
+    'too-many-assignments': 'Au plus {{max}} tables rangées à la main par source de schéma.',
+    'too-many-sources': 'Ce dépôt a déjà des groupes pour {{max}} sources de schéma, le maximum.',
+    'duplicate-origin':
+      'Deux groupes revendiquent le même fichier, dossier ou schéma Postgres. Rechargez la page et réessayez.',
+  },
+}

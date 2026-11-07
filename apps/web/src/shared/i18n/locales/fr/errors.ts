@@ -61,6 +61,9 @@ export const errors: Catalog['errors'] = {
     'invalid-layout-target':
       "La demande de disposition n'indique pas de source ou de mode d'affichage valide, ou ce dépôt compte déjà 50 dispositions enregistrées.",
     'invalid-layout': 'Ces positions de tables ont été refusées. Rechargez la page et réessayez.',
+    'invalid-groups-target':
+      'La source de schéma de ces groupes est absente ou invalide. Rechargez la page.',
+    'invalid-groups': 'Ces groupes de tables ont été refusés. Rechargez la page et réessayez.',
     'invalid-compare': 'Cette comparaison est invalide : choisissez deux branches différentes.',
     'invalid-branch-name': "Ce nom de branche n'est pas valide.",
   },

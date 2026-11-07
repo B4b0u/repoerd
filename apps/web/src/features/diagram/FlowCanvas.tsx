@@ -3,20 +3,29 @@ import {
   Background,
   BackgroundVariant,
   MiniMap,
+  type NodeSelectionChange,
   type OnNodeDrag,
   type OnNodesChange,
   ReactFlow,
+  useKeyPress,
+  useStore,
+  useStoreApi,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { type ReactNode, useMemo, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useThemeContext } from '../../shared/theme/theme-context'
-import { CanvasToolbar } from './CanvasToolbar'
+import { CanvasToolbar, type GroupToolbarActions } from './CanvasToolbar'
 import { useFlowAriaLabels } from './flow-aria'
 import { edgeTypes, nodeTypes } from './flow-types'
+import { useGroupDisplay } from './groups/GroupFrames'
+import type { GroupView } from './groups/group-view'
+import { PlaceSelectionBar, SelectionStatus } from './groups/PlaceSelectionBar'
+import type { OnTablesMoved } from './groups/use-group-move'
 import type { HubLinksMode } from './hubs'
 import { minimapColor } from './model/diff-view'
 import { createHighlighter } from './model/highlight'
 import type { RelationshipFlowEdge, TableFlowNode } from './model/to-flow'
+import { FramesAndOverviewLabels } from './OverviewLabels'
 import { OverviewZoom } from './OverviewZoom'
 import { EdgeMarkerDefs } from './RelationshipEdge'
 
@@ -25,16 +34,24 @@ interface Props {
   edges: RelationshipFlowEdge[]
   onNodesChange: OnNodesChange<TableFlowNode>
   onNodeDragStop?: OnNodeDrag<TableFlowNode>
+  /** Tables moved together by their group's label (saved like a drag). */
+  onTablesMoved?: OnTablesMoved
   active?: string
   hidden: ReadonlySet<string>
   onActivate: (table: string | undefined) => void
   mode: DisplayMode
   onModeChange: (mode: DisplayMode) => void
   onRearrange?: () => void
+  groupActions?: GroupToolbarActions
   hiddenHubEdges?: ReadonlySet<string>
   hubs?: readonly string[]
   hubLinks?: Exclude<HubLinksMode, 'all'>
   onHubLinksChange?: (hubLinks: Exclude<HubLinksMode, 'all'> | undefined) => void
+  /** Table groups: their colour on the cards, and their frames unless `frames` is false. */
+  groups?: GroupView
+  frames?: boolean
+  /** Tables can be selected (Shift+click, Shift+drag) and placed into a group together. */
+  selectable?: boolean
   /** Overlays rendered above the canvas (banners, warnings). */
   children?: ReactNode
 }
@@ -44,31 +61,59 @@ export function FlowCanvas({
   edges,
   onNodesChange,
   onNodeDragStop,
+  onTablesMoved,
   active,
   hidden,
   onActivate,
   mode,
   onModeChange,
   onRearrange,
+  groupActions,
   hiddenHubEdges,
   hubs,
   hubLinks,
   onHubLinksChange,
+  groups,
+  frames = true,
+  selectable = false,
   children,
 }: Props) {
   const { theme } = useThemeContext()
   const ariaLabels = useFlowAriaLabels()
   const [hovered, setHovered] = useState<string | undefined>()
   const [highlight] = useState(createHighlighter)
+  const groupDisplay = useGroupDisplay(nodes, hidden, groups, frames)
+  const nodeGroups = groupDisplay.nodeGroups
   const display = useMemo(
-    () => highlight(nodes, edges, { active, hovered, hidden, hiddenHubEdges }),
-    [highlight, nodes, edges, active, hovered, hidden, hiddenHubEdges],
+    () => highlight(nodes, edges, { active, hovered, hidden, hiddenHubEdges, groups: nodeGroups }),
+    [highlight, nodes, edges, active, hovered, hidden, hiddenHubEdges, nodeGroups],
   )
 
+  const selection = useSelection(nodes, hidden, selectable, onNodesChange)
+  const canvas = useRef<HTMLDivElement>(null)
+  // The bar goes with the placed selection, and the focus it held with it: to the canvas instead,
+  // unless the focus has moved elsewhere meanwhile.
+  const onPlaced = (tables: string[]) => {
+    const focused = document.activeElement
+    if (!focused || focused === document.body || canvas.current?.contains(focused)) {
+      canvas.current?.focus()
+    }
+    selection.unselect(tables)
+  }
+
   return (
-    <div className="diagram-canvas">
+    // Focusable from code only (tabIndex -1): no tab stop of its own.
+    <div ref={canvas} tabIndex={-1} className="diagram-canvas outline-none">
       <EdgeMarkerDefs />
       {children}
+      {selectable && <SelectionStatus count={selection.tables.length} />}
+      {selection.tables.length > 0 && (
+        <PlaceSelectionBar
+          tables={selection.tables}
+          onPlaced={onPlaced}
+          onClear={selection.clear}
+        />
+      )}
       <ReactFlow
         nodes={display.nodes}
         edges={display.edges}
@@ -77,8 +122,14 @@ export function FlowCanvas({
         colorMode={theme}
         onNodesChange={onNodesChange}
         onNodeDragStop={onNodeDragStop}
-        onNodeClick={(_event, node) => onActivate(node.id)}
-        onPaneClick={() => onActivate(undefined)}
+        // Shift+click adds a table to the selection or takes it out: it does not activate it.
+        onNodeClick={(event, node) => {
+          if (!(selectable && event.shiftKey)) onActivate(node.id)
+        }}
+        onPaneClick={() => {
+          selection.clear()
+          onActivate(undefined)
+        }}
         onNodeMouseEnter={(_event, node) => setHovered(node.id)}
         onNodeMouseLeave={() => setHovered(undefined)}
         // The table list is the keyboard route: hundreds of inert tab stops would hide it.
@@ -86,13 +137,26 @@ export function FlowCanvas({
         edgesFocusable={false}
         ariaLabelConfig={ariaLabels}
         nodesConnectable={false}
-        elementsSelectable={false}
+        // Selecting is a Shift gesture: a plain click activates the table and selects nothing.
+        elementsSelectable={selection.selecting}
+        selectionKeyCode="Shift"
+        multiSelectionKeyCode="Shift"
+        selectionOnDrag={false}
         deleteKeyCode={null}
         onlyRenderVisibleElements
         minZoom={0.05}
         fitView
       >
         <OverviewZoom />
+        <SelectionGuard onBoxingChange={selection.setBoxing} />
+        <FramesAndOverviewLabels
+          nodes={nodes}
+          edges={edges}
+          hidden={hidden}
+          frames={groupDisplay.frames}
+          proposed={groups?.proposed ?? false}
+          onTablesMoved={onTablesMoved}
+        />
         <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
         <MiniMap<TableFlowNode>
           pannable
@@ -105,6 +169,7 @@ export function FlowCanvas({
           mode={mode}
           onModeChange={onModeChange}
           onRearrange={onRearrange}
+          groupActions={groupActions}
           hubs={hubs}
           hubLinks={hubLinks}
           onHubLinksChange={onHubLinksChange}
@@ -112,4 +177,83 @@ export function FlowCanvas({
       </ReactFlow>
     </div>
   )
+}
+
+/**
+ * The tables selected on the canvas, with Shift+click (adds or removes a card) and Shift+drag (a
+ * selection box); Escape or a click on the empty canvas empties it. A hidden table leaves it.
+ * Dragging a selected card moves the whole selection; dragging another one empties it. A mouse
+ * gesture: the cards are no tab stops, the keyboard places a table from its details' group select.
+ */
+function useSelection(
+  nodes: Props['nodes'],
+  hidden: Props['hidden'],
+  selectable: boolean,
+  onNodesChange: Props['onNodesChange'],
+) {
+  const shift = useKeyPress('Shift')
+  // A selection box being drawn keeps selecting on until released, even once Shift is let go.
+  const [boxing, setBoxing] = useState(false)
+  const tables = useMemo(
+    () => (selectable ? nodes.filter((n) => n.selected && !hidden.has(n.id)).map((n) => n.id) : []),
+    [nodes, hidden, selectable],
+  )
+  const unselect = useCallback(
+    (ids: string[]) => {
+      if (ids.length === 0) return
+      onNodesChange(ids.map((id): NodeSelectionChange => ({ type: 'select', id, selected: false })))
+    },
+    [onNodesChange],
+  )
+  const clear = useCallback(
+    () => unselect(nodes.filter((n) => n.selected).map((n) => n.id)),
+    [nodes, unselect],
+  )
+  // Hidden tables, or all of them once selecting is no longer allowed, leave the selection.
+  useEffect(() => {
+    unselect(nodes.filter((n) => n.selected && (!selectable || hidden.has(n.id))).map((n) => n.id))
+  }, [nodes, hidden, selectable, unselect])
+  const any = tables.length > 0
+  useEffect(() => {
+    if (!any) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      // A field, or a menu that handled its Escape (closing itself), keeps the selection.
+      if (event.key === 'Escape' && !event.defaultPrevented && !isTextField(event.target)) clear()
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [any, clear])
+  return { tables, clear, unselect, selecting: selectable && (shift || boxing), setBoxing }
+}
+
+const isTextField = (target: EventTarget | null) =>
+  target instanceof HTMLElement &&
+  (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
+
+/**
+ * Relies on internals of React Flow's store (nodesSelectionActive, userSelectionRect,
+ * multiSelectionActive, userSelectionActive), not part of its documented API: check this guard
+ * again on every upgrade of @xyflow/react (written against 12.12).
+ *
+ * Keeps React Flow's selection state to what this canvas uses, from inside <ReactFlow>: reports
+ * whether a selection box is being drawn. Its store is corrected as soon as it changes, before any
+ * render: no overlay over the selected cards once a box is drawn (it would catch their clicks and
+ * hover, and move them with the arrow keys without saving), and no box start left over by a press
+ * whose Shift was let go before the button (React Flow would then draw a box on a mere move).
+ */
+function SelectionGuard({ onBoxingChange }: { onBoxingChange: (boxing: boolean) => void }) {
+  const store = useStoreApi()
+  const boxing = useStore((state) => state.userSelectionActive)
+  useEffect(() => onBoxingChange(boxing), [boxing, onBoxingChange])
+  useEffect(
+    () =>
+      store.subscribe((state) => {
+        if (state.nodesSelectionActive) store.setState({ nodesSelectionActive: false })
+        // Shift is React Flow's multi-selection key here.
+        if (state.userSelectionRect && !state.userSelectionActive && !state.multiSelectionActive)
+          store.setState({ userSelectionRect: null })
+      }),
+    [store],
+  )
+  return null
 }

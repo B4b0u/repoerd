@@ -8,12 +8,19 @@ import {
 import { Toaster as Sonner, type ToasterProps } from 'sonner'
 import { useThemeContext } from '@/shared/theme/theme-context'
 
-const Toaster = ({ ...props }: ToasterProps) => {
+/**
+ * Clear of the header (60 px from the top) and of the edges; on the left, past the diagram's table
+ * list (w-65): the notices in a left corner are about the canvas and must not hide the list.
+ */
+const OFFSET = { top: 60, right: 60, bottom: 60, left: 'calc(16.25rem + 16px)' }
+
+const Toaster = ({ offset = OFFSET, ...props }: ToasterProps) => {
   const { theme } = useThemeContext()
 
   return (
     <Sonner
       theme={theme}
+      offset={offset}
       className="toaster group"
       icons={{
         success: <CircleCheckIcon className="size-4" />,

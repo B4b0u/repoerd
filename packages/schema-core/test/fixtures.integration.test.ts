@@ -155,6 +155,11 @@ describe('showcase acme/storefront (Prisma)', () => {
     expect(feature.relationships).toHaveLength(36)
   })
 
+  it('tells which file declares each table', async () => {
+    const { tables } = await schemaOf('acme', 'storefront')
+    expect(tables.orders?.file).toBe('prisma/models/orders.prisma')
+  })
+
   it('keeps the composite keys, the composite foreign key and the category tree', async () => {
     const { tables, enums } = await schemaOf('acme', 'storefront')
     expect(tables['inventory.stock_levels']?.schema).toBe('inventory')
@@ -248,6 +253,12 @@ describe('showcase acme/helpdesk (Drizzle)', () => {
       [...HELPDESK_AT_FORK, 'escalation_rules', 'escalations'].sort(),
     )
     expect(feature.relationships).toHaveLength(35)
+  })
+
+  it('tells which file declares each table, never the barrel', async () => {
+    const { tables } = await schemaOf('acme', 'helpdesk')
+    expect(tables.tickets?.file).toBe('src/db/schema/tickets.ts')
+    expect(Object.values(tables).filter((t) => t.file?.endsWith('index.ts'))).toEqual([])
   })
 
   it('reads the array extra config, spread columns and the audit schema', async () => {

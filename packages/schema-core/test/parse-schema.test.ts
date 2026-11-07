@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createParserPool, type ParserPool } from '../src/isolate/parser-pool.js'
-import { parseSchema } from '../src/parse/parse-schema.js'
+import { fileAtLine, parseSchema } from '../src/parse/parse-schema.js'
 
 /** The real parser child, which also dies on "__crash__" and hangs on "__hang__". */
 const TEST_CHILD = new URL('./helpers/test-child.ts', import.meta.url)
@@ -141,6 +141,84 @@ describe('parseSchema', () => {
       },
     ])
   })
+
+  it('gives each Drizzle table the file declaring it', async () => {
+    const result = await parseSchema(
+      [
+        {
+          path: 'src/db/schema/users.ts',
+          content:
+            "import { pgTable, uuid } from 'drizzle-orm/pg-core'\nexport const users = pgTable('users', { id: uuid('id').primaryKey() })",
+        },
+        {
+          path: 'src/db/schema/billing.ts',
+          content:
+            "import { pgTable, uuid } from 'drizzle-orm/pg-core'\r\nimport { users } from './users'\r\nexport const invoices = pgTable('invoices', { id: uuid('id').primaryKey(), userId: uuid('user_id').references(() => users.id) })\r\n",
+        },
+      ],
+      'drizzle',
+    )
+    if (!result.ok) throw new Error(JSON.stringify(result.failure))
+    expect(result.schema.tables.users?.file).toBe('src/db/schema/users.ts')
+    expect(result.schema.tables.invoices?.file).toBe('src/db/schema/billing.ts')
+  })
+
+  it('gives each Prisma model the file declaring it', async () => {
+    const result = await parseSchema(
+      [
+        {
+          path: 'prisma/schema.prisma',
+          content:
+            'datasource db {\n  provider = "postgresql"\n  url      = env("DATABASE_URL")\n}\n\nmodel User {\n  id Int @id\n  @@map("users")\n}\n',
+        },
+        {
+          path: 'prisma/models/billing.prisma',
+          content: 'model Invoice {\r\n  id Int @id\r\n  @@map("invoices")\r\n}\r\n',
+        },
+      ],
+      'prisma',
+    )
+    if (!result.ok) throw new Error(JSON.stringify(result.failure))
+    expect(result.schema.tables.users?.file).toBe('prisma/schema.prisma')
+    expect(result.schema.tables.invoices?.file).toBe('prisma/models/billing.prisma')
+  })
+
+  it('maps a line to the file of the joined text, and to nothing past the end', () => {
+    const files = [
+      { path: 'a.ts', content: 'x\r\ny' },
+      { path: 'b.ts', content: 'z\n' },
+    ]
+    expect([0, 1, 2, 3].map((line) => fileAtLine(files, line))).toEqual([
+      'a.ts',
+      'a.ts',
+      'b.ts',
+      'b.ts',
+    ])
+    expect(fileAtLine(files, 4)).toBeUndefined()
+  })
+
+  it('maps lines to files on many large files without rescanning them per table', async () => {
+    const files = Array.from({ length: 1000 }, (_, i) => ({
+      path: `models/m${String(i).padStart(4, '0')}.prisma`,
+      content: `model T${i} {\n  id Int @id\n}\n${'// filler\n'.repeat(1000)}`,
+    }))
+    files[0] = {
+      path: files[0]?.path as string,
+      content: `datasource db {\n  provider = "postgresql"\n  url      = env("DATABASE_URL")\n}\n\n${files[0]?.content}`,
+    }
+    const started = performance.now()
+    expect(fileAtLine(files, 0)).toBe(files[0]?.path)
+    const lastStart = files.slice(0, 999).reduce((n, f) => n + f.content.split('\n').length, 0)
+    expect(fileAtLine(files, lastStart)).toBe(files[999]?.path)
+    expect(fileAtLine(files, lastStart - 1)).toBe(files[998]?.path)
+    const result = await parseSchema(files, 'prisma')
+    if (!result.ok) throw new Error(JSON.stringify(result.failure))
+    for (const i of [0, 1, 500, 998, 999]) {
+      expect(result.schema.tables[`T${i}`]?.file).toBe(files[i]?.path)
+    }
+    // Generous: the quadratic mapping alone took seconds on this input.
+    expect(performance.now() - started).toBeLessThan(20_000)
+  }, 60_000)
 
   it('parses Drizzle schemas split across files, using database column names', async () => {
     const result = await parseSchema(

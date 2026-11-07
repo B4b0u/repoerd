@@ -1,6 +1,7 @@
 export const detail = {
   label: 'Details of {{table}}',
   close: 'Close details',
+  file: 'File',
   sections: {
     columns: 'Columns',
     indexes: 'Indexes',

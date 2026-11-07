@@ -6,6 +6,7 @@ import { Trans, useTranslation } from 'react-i18next'
 import { Button } from '../../shared/ui/button'
 import { PageMessage } from '../../shared/ui/PageMessage'
 import { FlowCanvas } from './FlowCanvas'
+import type { GroupView } from './groups/group-view'
 import { layoutRelated } from './layout/related'
 import { placementFailureMessage } from './messages'
 import { buildFlow, type RelationshipFlowEdge, type TableFlowNode } from './model/to-flow'
@@ -25,6 +26,7 @@ interface Props {
   hubs?: readonly string[]
   hubLinks?: 'none' | 'first'
   onHubLinksChange?: (hubLinks: 'none' | 'first' | undefined) => void
+  groups?: GroupView
 }
 
 /** A table and its direct neighbours, laid out on their own. Nothing here is saved (D12). */
@@ -42,6 +44,7 @@ export function RelatedCanvas({
   hubs,
   hubLinks,
   onHubLinksChange,
+  groups,
 }: Props) {
   const [nodes, setNodes, onNodesChange] = useNodesState<TableFlowNode>([])
   const [edges, setEdges] = useEdgesState<RelationshipFlowEdge>([])
@@ -97,6 +100,9 @@ export function RelatedCanvas({
       hubs={hubs}
       hubLinks={hubLinks}
       onHubLinksChange={onHubLinksChange}
+      // A computed, partial view: no frames, each grouped card names its group.
+      groups={groups}
+      frames={false}
     >
       <div className="absolute top-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-3 rounded-lg border bg-card py-1.5 pr-1.5 pl-3.5 text-sm shadow-md">
         <span>

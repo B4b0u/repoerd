@@ -1,8 +1,11 @@
 import { Handle, type NodeProps, Position } from '@xyflow/react'
 import { type CSSProperties, memo } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useThemeContext } from '../../shared/theme/theme-context'
 import { TableIcon } from '../../shared/ui/icons'
 import { ColumnIcon } from './ColumnIcon'
+import type { GroupColors } from './groups/group-colors'
+import { useGroupsTranslation } from './groups/groups-i18n'
 import { changeOf, MARK } from './model/change-marks'
 import { columnChangeTitle, type NodeDiff, typeChange } from './model/diff-view'
 import { HEADER_HEIGHT, ROW_HEIGHT, TABLE_NAME_HEIGHT, TABLE_WIDTH } from './model/dimensions'
@@ -14,6 +17,20 @@ function HubColumnBadge({ table }: { table: string }) {
   return (
     <span className="table-node__hub-badge" title={label} role="img" aria-label={label}>
       →
+    </span>
+  )
+}
+
+/** On a table outside its group's frame: the group's name, since colour alone says nothing. */
+function GroupTag({ name, colors }: { name: string; colors: GroupColors }) {
+  const { t } = useGroupsTranslation()
+  return (
+    <span
+      className="table-node__group-tag"
+      title={t('tag', { name })}
+      style={{ background: colors.label, color: colors.labelText }}
+    >
+      {name}
     </span>
   )
 }
@@ -50,16 +67,28 @@ function DiffBadge({ diff }: { diff: NodeDiff }) {
   )
 }
 
-export const TableNode = memo(function TableNode({ data }: NodeProps<TableFlowNode>) {
+type CardProps = NodeProps<TableFlowNode>
+
+function TableCard({ data, selected }: CardProps) {
+  const { theme } = useThemeContext()
   const foreignKeys = new Set(data.foreignKeyColumns)
   const nameOnly = data.mode === 'TABLE_NAME'
   const classes = ['table-node', `table-node--${data.highlight}`]
   if (nameOnly) classes.push('table-node--name-only')
   if (data.diff) classes.push(`table-node--diff-${data.diff.status}`)
+  if (selected) classes.push('table-node--selected')
+  const colors = data.group?.colors[theme]
+  if (colors) classes.push('table-node--grouped')
   return (
     <div
       className={classes.join(' ')}
-      style={{ width: TABLE_WIDTH, '--name-length': data.table.name.length } as CSSProperties}
+      style={
+        {
+          width: TABLE_WIDTH,
+          '--name-length': data.table.name.length,
+          ...(colors ? { '--group-stroke': colors.stroke } : {}),
+        } as CSSProperties
+      }
     >
       <header
         className="table-node__header"
@@ -75,6 +104,7 @@ export const TableNode = memo(function TableNode({ data }: NodeProps<TableFlowNo
         />
         <TableIcon className="table-node__header-icon" />
         <span className="table-node__title">{data.table.name}</span>
+        {data.group?.far && colors && <GroupTag name={data.group.name} colors={colors} />}
         {data.diff && <DiffBadge diff={data.diff} />}
         <Handle
           type="source"
@@ -143,4 +173,13 @@ export const TableNode = memo(function TableNode({ data }: NodeProps<TableFlowNo
       </span>
     </div>
   )
-})
+}
+
+/**
+ * The card only shows its data and whether it is selected: the other props (`selectable`,
+ * `draggable`, `dragging`, its position...) change without changing it, e.g. on every Shift press.
+ */
+export const sameCard = (a: CardProps, b: CardProps) =>
+  a.data === b.data && a.selected === b.selected
+
+export const TableNode = memo(TableCard, sameCard)

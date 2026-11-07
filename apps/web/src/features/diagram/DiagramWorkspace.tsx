@@ -1,18 +1,24 @@
 import {
   type DbSchema,
   type DisplayMode,
+  proposeGroups,
   type RepoRef,
   relationshipStatus,
   type SchemaDiff,
 } from '@repoerd/model'
 import { ReactFlowProvider, useReactFlow } from '@xyflow/react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { motionDuration } from '../../shared/lib/motion'
 import { ChangesPanel } from '../compare/ChangesPanel'
 import { TableDetailPanel } from '../table-detail/TableDetailPanel'
 import { TableListPane } from '../table-list/TableListPane'
+import type { GroupToolbarActions } from './CanvasToolbar'
 import { DiagramCanvas } from './DiagramCanvas'
+import { useTableGroups } from './groups/api'
+import { GroupSelect } from './groups/GroupSelect'
+import { GroupEditingProvider } from './groups/group-editing'
+import { buildGroupView } from './groups/group-view'
 import { hiddenHubRelationships, hubViewSchema, resolveHubs } from './hubs'
 import { relatedTableNames } from './layout/related'
 import { canvasHiddenTables, changedTables } from './model/diff-view'
@@ -32,6 +38,8 @@ interface Props {
   updateView: ViewStateUpdate
   /** Comparison: `schema` is the union of both sides and this says what changed. */
   diff?: SchemaDiff
+  /** Comparison: the compared (after) side, which proposes the groups when none is saved. */
+  proposalSchema?: DbSchema
   /**
    * Table count the default display mode is chosen from; the schema's own when absent. A
    * comparison passes the compared branch's, so it opens in the mode the branch has alone.
@@ -56,6 +64,7 @@ function Workspace({
   viewState,
   updateView,
   diff,
+  proposalSchema,
   defaultModeTableCount,
 }: Props) {
   const flow = useReactFlow()
@@ -77,6 +86,51 @@ function Workspace({
     [schema, viewState.active, viewState.focus, viewState.compact, hiddenKey, shownKey],
   )
   const { t } = useTranslation('compare')
+  // Loading or failed: no groups, the diagram shows as usual (its first placement waits for them).
+  const groupsQuery = useTableGroups(repo, sourceId)
+  // Proposals shown again over the saved groups: local, and only for the source it was asked on.
+  const [reproposedFor, setReproposedFor] = useState<string>()
+  const reproposed = reproposedFor === sourceId
+  const groups = useMemo(
+    () =>
+      buildGroupView(schema, groupsQuery.data, {
+        proposalSchema,
+        loading: groupsQuery.isPending,
+        reproposed,
+      }),
+    [schema, groupsQuery.data, proposalSchema, groupsQuery.isPending, reproposed],
+  )
+  // A preview of the proposals is only shown: layouts and the related view keep the saved groups.
+  const savedGroups = useMemo(
+    () =>
+      reproposed
+        ? buildGroupView(schema, groupsQuery.data, {
+            proposalSchema,
+            loading: groupsQuery.isPending,
+          })
+        : groups,
+    [reproposed, groups, schema, groupsQuery.data, proposalSchema, groupsQuery.isPending],
+  )
+  // Back to the saved groups when the source changes (also on a later return to this source).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runs on the source change only
+  useEffect(() => setReproposedFor(undefined), [sourceId])
+  const hasProposals = useMemo(
+    () => proposeGroups(proposalSchema ?? schema).length > 0,
+    [proposalSchema, schema],
+  )
+  // No group buttons without the right to edit, nor during the preview of the proposals.
+  const groupActions: GroupToolbarActions | undefined =
+    groups.canEdit && !reproposed
+      ? {
+          // Proposals on screen with their banner when nothing is saved: nothing to show again.
+          repropose: !hasProposals
+            ? 'unavailable'
+            : groupsQuery.data?.configured === true
+              ? () => setReproposedFor(sourceId)
+              : undefined,
+          createGroup: groups.groups.length === 0,
+        }
+      : undefined
   const changedOnly = viewState.changed === true
   // Leaving the related view remounts the full canvas: it centres the table once placed.
   const [centerAfterRemount, setCenterAfterRemount] = useState<string>()
@@ -151,6 +205,18 @@ function Workspace({
       )
     } else setHidden(new Set([...tables.hidden, table]))
   }
+  // A group's checkbox: one URL update for all its tables.
+  const setTablesHidden = (list: string[], hide: boolean) => {
+    if (hide) return setHidden(new Set([...tables.hidden, ...list]))
+    const leaveChangedOnly = list.some(hiddenAsUnchanged)
+    updateView(
+      {
+        ...hiddenPatch(names, new Set([...tables.hidden].filter((name) => !list.includes(name)))),
+        ...(leaveChangedOnly ? { changed: undefined } : {}),
+      },
+      { replace: true },
+    )
+  }
   const showAll = () =>
     updateView({ ...hiddenPatch(names, new Set()), changed: undefined }, { replace: true })
   const select = (table: string) => {
@@ -169,89 +235,105 @@ function Workspace({
   }
 
   return (
-    <div className="absolute inset-0 flex">
-      <TableListPane
-        schema={schema}
-        hidden={canvasHidden}
-        active={tables.active}
-        onToggle={toggle}
-        onShowAll={showAll}
-        onHideAll={() => setHidden(new Set(names))}
-        onSelect={select}
-        changes={
-          diff && {
-            label: t('panel.tab', { count: changedTables(diff).length + diff.enums.length }),
-            content: (
-              <ChangesPanel
-                diff={diff}
-                active={tables.active}
-                onlyChanged={changedOnly}
-                onOnlyChangedChange={(next) =>
-                  updateView({ changed: next || undefined }, { replace: true })
-                }
-                onSelect={select}
-              />
-            ),
+    <GroupEditingProvider
+      repo={repo}
+      sourceId={sourceId}
+      schema={schema}
+      view={groups}
+      saved={groupsQuery.data}
+    >
+      <div className="absolute inset-0 flex">
+        <TableListPane
+          schema={schema}
+          hidden={canvasHidden}
+          active={tables.active}
+          onToggle={toggle}
+          onShowAll={showAll}
+          onHideAll={() => setHidden(new Set(names))}
+          onSelect={select}
+          groups={groups}
+          onSetHidden={setTablesHidden}
+          changes={
+            diff && {
+              label: t('panel.tab', { count: changedTables(diff).length + diff.enums.length }),
+              content: (
+                <ChangesPanel
+                  diff={diff}
+                  active={tables.active}
+                  onlyChanged={changedOnly}
+                  onOnlyChangedChange={(next) =>
+                    updateView({ changed: next || undefined }, { replace: true })
+                  }
+                  onSelect={select}
+                />
+              ),
+            }
           }
-        }
-      />
-      <div className="relative min-w-0 flex-1">
-        {tables.focus ? (
-          <RelatedCanvas
-            key={`${tables.focus}:${mode}`}
+        />
+        <div className="relative min-w-0 flex-1">
+          {tables.focus ? (
+            <RelatedCanvas
+              key={`${tables.focus}:${mode}`}
+              schema={schema}
+              focus={tables.focus}
+              mode={mode}
+              onModeChange={changeMode}
+              active={tables.active}
+              hidden={canvasHidden}
+              diff={diff}
+              onActivate={activate}
+              onBack={backToFullSchema}
+              hiddenHubEdges={hiddenHubEdges}
+              hubs={hubs}
+              hubLinks={viewState.hubLinks}
+              onHubLinksChange={changeHubLinks}
+              groups={savedGroups}
+            />
+          ) : (
+            <DiagramCanvas
+              key={mode}
+              repo={repo}
+              schema={schema}
+              sourceId={sourceId}
+              inheritLayout={inheritLayout}
+              mode={mode}
+              onModeChange={changeMode}
+              active={tables.active}
+              hidden={canvasHidden}
+              diff={diff}
+              onActivate={activate}
+              centerOn={centerAfterRemount}
+              onCentered={() => setCenterAfterRemount(undefined)}
+              hiddenHubEdges={hiddenHubEdges}
+              hubs={hubs}
+              hubLinks={viewState.hubLinks}
+              onHubLinksChange={changeHubLinks}
+              groups={groups}
+              layoutMembership={savedGroups.membership}
+              groupActions={groupActions}
+              onLeaveReproposal={() => setReproposedFor(undefined)}
+            />
+          )}
+        </div>
+        {tables.active && (
+          <TableDetailPanel
             schema={schema}
-            focus={tables.focus}
-            mode={mode}
-            onModeChange={changeMode}
-            active={tables.active}
-            hidden={canvasHidden}
-            diff={diff}
-            onActivate={activate}
-            onBack={backToFullSchema}
-            hiddenHubEdges={hiddenHubEdges}
-            hubs={hubs}
-            hubLinks={viewState.hubLinks}
-            onHubLinksChange={changeHubLinks}
-          />
-        ) : (
-          <DiagramCanvas
-            key={mode}
-            repo={repo}
-            schema={schema}
-            sourceId={sourceId}
-            inheritLayout={inheritLayout}
-            mode={mode}
-            onModeChange={changeMode}
-            active={tables.active}
-            hidden={canvasHidden}
-            diff={diff}
-            onActivate={activate}
-            centerOn={centerAfterRemount}
-            onCentered={() => setCenterAfterRemount(undefined)}
-            hiddenHubEdges={hiddenHubEdges}
-            hubs={hubs}
-            hubLinks={viewState.hubLinks}
-            onHubLinksChange={changeHubLinks}
-          />
+            tableName={tables.active}
+            onClose={() => activate(undefined)}
+            diff={diff?.tables[tables.active]}
+            isHub={hubs.includes(tables.active)}
+            onHubChange={(on) => toggleHub(tables.active as string, on)}
+            group={<GroupSelect key={tables.active} table={tables.active} />}
+          >
+            <RelatedTablesPreview
+              schema={schema}
+              table={tables.active}
+              diff={diff}
+              onOpen={() => openRelated(tables.active as string)}
+            />
+          </TableDetailPanel>
         )}
       </div>
-      {tables.active && (
-        <TableDetailPanel
-          schema={schema}
-          tableName={tables.active}
-          onClose={() => activate(undefined)}
-          diff={diff?.tables[tables.active]}
-          isHub={hubs.includes(tables.active)}
-          onHubChange={(on) => toggleHub(tables.active as string, on)}
-        >
-          <RelatedTablesPreview
-            schema={schema}
-            table={tables.active}
-            diff={diff}
-            onOpen={() => openRelated(tables.active as string)}
-          />
-        </TableDetailPanel>
-      )}
-    </div>
+    </GroupEditingProvider>
   )
 }

@@ -58,6 +58,9 @@ export const errors = {
     'invalid-layout-target':
       'The layout request names no valid source or display mode, or this repository already has 50 saved layouts.',
     'invalid-layout': 'These table positions were refused. Reload the page and try again.',
+    'invalid-groups-target':
+      'The schema source of these groups is missing or invalid. Reload the page.',
+    'invalid-groups': 'These table groups were refused. Reload the page and try again.',
     'invalid-compare': 'This comparison is not valid: choose two different branches.',
     'invalid-branch-name': 'This is not a valid branch name.',
   } satisfies Record<ApiErrorReason, string>,

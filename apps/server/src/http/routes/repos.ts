@@ -8,6 +8,7 @@ import {
   repoSettingsBodySchema,
   type SchemaResponse,
   savePositionsBodySchema,
+  type TableGroupsResponse,
 } from '@repoerd/contracts'
 import { isCompareMode, type RepoRef } from '@repoerd/model'
 import type { AccessibleRepo } from '../../application/ports/repo-directory.js'
@@ -15,11 +16,17 @@ import type { LayoutTarget, SaveTablePositions } from '../../application/use-cas
 import type { AccessLevel } from '../../application/use-cases/repo-access.js'
 import type { CompareSide } from '../../domain/branch-compare.js'
 import { isValidBranchName } from '../../domain/branch-name.js'
-import type { LayoutError } from '../../domain/layout.js'
+import { type LayoutError, validateSourceId } from '../../domain/layout.js'
 import type { KnownRepo } from '../../domain/repo.js'
 import { isValidRepoSegment } from '../../domain/repo-segment.js'
+import { isValidGroupId, type TableGroupsError } from '../../domain/table-groups.js'
 import { accessError, apiError, manualSourcesMessage, repoNotFound } from '../errors.js'
 import { readBody } from '../read-body.js'
+import {
+  placeTablesBodySchema,
+  replaceTableGroupsBodySchema,
+  tableGroupBodySchema,
+} from '../table-group-bodies.js'
 import type { AppContext, AppDeps, AppHono } from '../types.js'
 
 function layoutErrorMessage(error: LayoutError): string {
@@ -39,6 +46,8 @@ function layoutErrorMessage(error: LayoutError): string {
 function layoutErrorReason(error: LayoutError): 'invalid-layout' | 'invalid-layout-target' {
   return error.kind === 'invalid-positions' ? 'invalid-layout' : 'invalid-layout-target'
 }
+
+const MISSING_GROUPS_TARGET = 'Invalid repository or source'
 
 const MISSING_LAYOUT_TARGET = 'Invalid repository, source or mode'
 
@@ -280,5 +289,117 @@ export function registerRepoRoutes(app: AppHono, deps: AppDeps) {
         result.error.rejection,
       )
     return c.json({ sources: result.value, canEdit: true } satisfies RepoSettingsResponse)
+  })
+
+  /** The group routes' `?source=`: a schema source id, as in the layout routes. */
+  const groupsSource = (c: AppContext): string | null => {
+    const sourceId = validateSourceId(c.req.query('source') ?? '')
+    return sourceId.ok ? sourceId.value : null
+  }
+
+  const missingGroupsTarget = (c: AppContext) =>
+    apiError(c, 400, 'bad_request', MISSING_GROUPS_TARGET, { reason: 'invalid-groups-target' })
+
+  /** A refused group write: `reason` is invalid-groups (or invalid-groups-target), `problem` says why. */
+  const invalidGroups = (c: AppContext, error: TableGroupsError) =>
+    apiError(c, 400, 'bad_request', error.message, {
+      reason: error.kind,
+      problem: error.problem,
+    })
+
+  const invalidGroupId = (c: AppContext) =>
+    invalidGroups(c, { kind: 'invalid-groups', message: 'Invalid group id', problem: 'invalid' })
+
+  const invalidGroupsBody = (c: AppContext) =>
+    apiError(c, 400, 'bad_request', 'Invalid groups body', { reason: 'invalid-body' })
+
+  // Table groups are shared by every branch and user of a source: reading needs read access.
+  app.get('/api/repos/:owner/:repo/groups', async (c) => {
+    const access = await authorizedAccess(c)
+    if (access instanceof Response) return access
+    const sourceId = groupsSource(c)
+    if (!sourceId) return missingGroupsTarget(c)
+    const repo = { id: access.id, owner: access.owner, name: access.name }
+    const stored = await deps.tableGroups.get(repo, sourceId)
+    return c.json({
+      configured: stored.configured,
+      groups: stored.config.groups,
+      assignments: stored.config.assignments,
+      canEdit: access.canWrite,
+    } satisfies TableGroupsResponse)
+  })
+
+  // Writing groups needs push access (like the settings) and costs a rate-limit slot.
+  app.put('/api/repos/:owner/:repo/groups', async (c) => {
+    const limited = throttled(c)
+    if (limited) return limited
+    const repo = await authorized(c, 'write')
+    if (repo instanceof Response) return repo
+    const sourceId = groupsSource(c)
+    if (!sourceId) return missingGroupsTarget(c)
+    const body = await readBody(c, replaceTableGroupsBodySchema)
+    if (!body) return invalidGroupsBody(c)
+    const result = await deps.tableGroups.replace(repo, sourceId, body, c.get('user').id)
+    if (!result.ok) return invalidGroups(c, result.error)
+    return c.json({
+      configured: true,
+      groups: result.value.config.groups,
+      assignments: result.value.config.assignments,
+      canEdit: true,
+    } satisfies TableGroupsResponse)
+  })
+
+  app.put('/api/repos/:owner/:repo/groups/:groupId', async (c) => {
+    const limited = throttled(c)
+    if (limited) return limited
+    const repo = await authorized(c, 'write')
+    if (repo instanceof Response) return repo
+    const sourceId = groupsSource(c)
+    if (!sourceId) return missingGroupsTarget(c)
+    const groupId = c.req.param('groupId')
+    if (!isValidGroupId(groupId)) return invalidGroupId(c)
+    const body = await readBody(c, tableGroupBodySchema)
+    if (!body) return invalidGroupsBody(c)
+    const result = await deps.tableGroups.saveGroup(
+      repo,
+      sourceId,
+      { id: groupId, ...body },
+      c.get('user').id,
+    )
+    if (!result.ok) return invalidGroups(c, result.error)
+    return c.body(null, 204)
+  })
+
+  app.delete('/api/repos/:owner/:repo/groups/:groupId', async (c) => {
+    const limited = throttled(c)
+    if (limited) return limited
+    const repo = await authorized(c, 'write')
+    if (repo instanceof Response) return repo
+    const sourceId = groupsSource(c)
+    if (!sourceId) return missingGroupsTarget(c)
+    const groupId = c.req.param('groupId')
+    if (!isValidGroupId(groupId)) return invalidGroupId(c)
+    await deps.tableGroups.deleteGroup(repo, sourceId, groupId, c.get('user').id)
+    return c.body(null, 204)
+  })
+
+  app.patch('/api/repos/:owner/:repo/groups-assignments', async (c) => {
+    const limited = throttled(c)
+    if (limited) return limited
+    const repo = await authorized(c, 'write')
+    if (repo instanceof Response) return repo
+    const sourceId = groupsSource(c)
+    if (!sourceId) return missingGroupsTarget(c)
+    const body = await readBody(c, placeTablesBodySchema)
+    if (!body) return invalidGroupsBody(c)
+    const result = await deps.tableGroups.place(
+      repo,
+      sourceId,
+      body.assignments,
+      body.clear,
+      c.get('user').id,
+    )
+    if (!result.ok) return invalidGroups(c, result.error)
+    return c.body(null, 204)
   })
 }

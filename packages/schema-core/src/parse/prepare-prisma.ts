@@ -51,11 +51,20 @@ function blocksOf(lines: readonly string[]): { blocks: Block[]; unclosed: boolea
   return { blocks, unclosed: open !== null || unrecognised }
 }
 
+/** Key of the table a `model` or `view` block becomes (attribute lines only: a commented `@@map` does not count). */
+function tableKeyOf(block: Block, body: readonly string[]): string {
+  const text = body.filter((line) => line.trimStart().startsWith('@@')).join('\n')
+  const table = MAP_ATTRIBUTE.exec(text)?.[1] ?? block.name
+  return qualifiedTableName(SCHEMA_ATTRIBUTE.exec(text)?.[1], table)
+}
+
 export interface PreparedPrisma {
   /** The schema Liam parses. */
   text: string
   /** Keys of the tables Liam makes of `view` blocks: removed after parsing, and counted. */
   viewTables: string[]
+  /** Table key of each `model` block to the 0-based line of its header in the input. */
+  tableLines: Record<string, number>
   /** 1-based lines of the placeholder urls in `text`: see restoreLineNumbers. */
   injectedLines: number[]
 }
@@ -65,9 +74,10 @@ export function preparePrismaSchema(input: string): PreparedPrisma {
   const output = [...lines]
   const inserted = new Map<number, string>()
   const viewTables: string[] = []
+  const tableLineEntries: [string, number][] = []
   const { blocks, unclosed } = blocksOf(lines)
   // A block left open: Prisma must report that real error, not one about our additions.
-  if (unclosed) return { text: input, viewTables: [], injectedLines: [] }
+  if (unclosed) return { text: input, viewTables: [], tableLines: {}, injectedLines: [] }
   for (const block of blocks) {
     const body = lines.slice(block.start + 1, block.end)
     if (block.keyword === 'generator') {
@@ -75,10 +85,9 @@ export function preparePrismaSchema(input: string): PreparedPrisma {
     } else if (block.keyword === 'datasource' && !body.some((line) => URL_PROPERTY.test(line))) {
       inserted.set(block.start, `  url = "${PLACEHOLDER_DATASOURCE_URL}"`)
     } else if (block.keyword === 'view') {
-      // Attribute lines only: a commented `// @@map("old")` does not count.
-      const text = body.filter((line) => line.trimStart().startsWith('@@')).join('\n')
-      const table = MAP_ATTRIBUTE.exec(text)?.[1] ?? block.name
-      viewTables.push(qualifiedTableName(SCHEMA_ATTRIBUTE.exec(text)?.[1], table))
+      viewTables.push(tableKeyOf(block, body))
+    } else if (block.keyword === 'model') {
+      tableLineEntries.push([tableKeyOf(block, body), block.start])
     }
   }
   const injectedLines: number[] = []
@@ -94,6 +103,8 @@ export function preparePrismaSchema(input: string): PreparedPrisma {
   return {
     text: `${text}\n\ngenerator repoerd {\n  provider        = "prisma-client-js"\n  previewFeatures = [${features}]\n}\n`,
     viewTables,
+    // Own keys: a table named `__proto__` must stay a key.
+    tableLines: Object.fromEntries(tableLineEntries),
     injectedLines,
   }
 }

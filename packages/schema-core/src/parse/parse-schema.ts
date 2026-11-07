@@ -28,15 +28,49 @@ export interface ParseOptions {
   unresolvedImports?: string[]
 }
 
+/**
+ * The file holding a 0-based line of the text parseSchema builds by joining `files` (given in
+ * that order) with '\n'. Each file occupies as many lines as it has when split on line breaks.
+ */
+export function fileAtLine(files: readonly SchemaFile[], line: number): string | undefined {
+  return fileAtLineIn(files, lineEnds(files), line)
+}
+
+/** Exclusive end line of each file in the joined text (one split per file). */
+function lineEnds(files: readonly SchemaFile[]): number[] {
+  const ends: number[] = []
+  let end = 0
+  for (const file of files) {
+    end += file.content.split(/\r?\n/).length
+    ends.push(end)
+  }
+  return ends
+}
+
+/** Binary search of the first file whose end is past `line`. */
+function fileAtLineIn(
+  files: readonly SchemaFile[],
+  ends: readonly number[],
+  line: number,
+): string | undefined {
+  if (line < 0) return undefined
+  let low = 0
+  let high = ends.length
+  while (low < high) {
+    const middle = (low + high) >>> 1
+    if ((ends[middle] as number) <= line) low = middle + 1
+    else high = middle
+  }
+  return files[low]?.path
+}
+
 export async function parseSchema(
   files: SchemaFile[],
   format: SchemaFormat,
   options: ParseOptions = {},
 ): Promise<ParseResult> {
-  const input = [...files]
-    .sort((a, b) => a.path.localeCompare(b.path))
-    .map((file) => file.content)
-    .join('\n')
+  const ordered = [...files].sort((a, b) => a.path.localeCompare(b.path))
+  const input = ordered.map((file) => file.content).join('\n')
   const pool = options.pool ?? defaultParserPool()
   const outcome = await pool.parse(input, format, options.timeoutMs ?? DEFAULT_PARSE_TIMEOUT_MS)
 
@@ -54,7 +88,13 @@ export async function parseSchema(
       if (outcome.errors.length > 0) {
         return { ok: false, failure: parseError(format, clean(outcome.errors.join('\n'))) }
       }
-      const schema = toDbSchema(outcome.schema, { casing: options.casing })
+      const declarationFiles = new Map<string, string>()
+      const ends = lineEnds(ordered)
+      for (const [key, line] of Object.entries(outcome.declarationLines)) {
+        const file = fileAtLineIn(ordered, ends, line)
+        if (file !== undefined) declarationFiles.set(key, file)
+      }
+      const schema = toDbSchema(outcome.schema, { casing: options.casing, declarationFiles })
       // Files with content but no table: a construct RepoERD cannot read, or tables behind imports
       // detection could not follow. Said as such, never drawn as an empty schema.
       if (

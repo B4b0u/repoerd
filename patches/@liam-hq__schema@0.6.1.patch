@@ -302,11 +302,11 @@ index 5eb14b1d0e454d40677ff11ad93750a58f5cca6a..8e3c7944383a66ed08bbe9db4c3782ae
          catch (error) {
              errors.push(new Error(`Error parsing table ${tableName}: ${error instanceof Error ? error.message : String(error)}`));
 diff --git a/dist/parser/drizzle/postgres/mainParser.js b/dist/parser/drizzle/postgres/mainParser.js
-index 1c79a49e2e1aa8053a0836982ca1f06de6b9f1ec..e6d3d19cb79380622452806348c950ca93da8e70 100644
+index 1c79a49e2e1aa8053a0836982ca1f06de6b9f1ec..176d193bfbe7a2e05b7cddfbe06428ad2ba5ce8f 100644
 --- a/dist/parser/drizzle/postgres/mainParser.js
 +++ b/dist/parser/drizzle/postgres/mainParser.js
 @@ -1,11 +1,13 @@
-+// Modified by RepoERD: tables keyed `schema.table` outside `public` (pgSchema), chained schema tables, spread columns (object literals and functions returning one), views counted and skipped, customType dataType literals (dropped on pg-core import collision or disagreeing declarations).
++// Modified by RepoERD: tables keyed `schema.table` outside `public` (pgSchema), chained schema tables, spread columns (object literals and functions returning one), views counted and skipped, customType dataType literals (dropped on pg-core import collision or disagreeing declarations), declaration spans of tables and the module span start.
  /**
   * Main orchestrator for Drizzle ORM schema parsing
   */
@@ -321,16 +321,24 @@ index 1c79a49e2e1aa8053a0836982ca1f06de6b9f1ec..e6d3d19cb79380622452806348c950ca
  /**
   * Parse Drizzle TypeScript schema to extract table definitions using SWC AST
   */
-@@ -18,27 +20,132 @@ const parseDrizzleSchema = (sourceCode) => {
+@@ -18,27 +20,140 @@ const parseDrizzleSchema = (sourceCode) => {
      const tables = {};
      const enums = {};
      const variableToTableMapping = {};
 +    const context = collectModuleContext(ast);
++    context.declarationSpans = {};
      // Traverse the AST to find pgTable calls
 -    visitModule(ast, tables, enums, variableToTableMapping);
 -    return { tables, enums, variableToTableMapping };
 +    visitModule(ast, tables, enums, variableToTableMapping, context);
-+    return { tables, enums, variableToTableMapping, ignoredViews: context.ignoredViews };
++    return {
++        tables,
++        enums,
++        variableToTableMapping,
++        ignoredViews: context.ignoredViews,
++        declarationSpans: context.declarationSpans,
++        moduleSpanStart: ast.span.start,
++    };
  };
  /**
 - * Visit and traverse the module AST
@@ -465,7 +473,7 @@ index 1c79a49e2e1aa8053a0836982ca1f06de6b9f1ec..e6d3d19cb79380622452806348c950ca
  };
  /**
   * Check if the call expression is a comment call
-@@ -55,26 +162,37 @@ const isCommentCall = (callExpr) => {
+@@ -55,26 +170,38 @@ const isCommentCall = (callExpr) => {
  const isPgEnumCall = (callExpr) => {
      return (callExpr.callee.type === 'Identifier' && callExpr.callee.value === 'pgEnum');
  };
@@ -508,17 +516,18 @@ index 1c79a49e2e1aa8053a0836982ca1f06de6b9f1ec..e6d3d19cb79380622452806348c950ca
 - */
 -const handleSchemaTableCall = (declarator, callExpr, tables, variableToTableMapping) => {
 -    const table = parseSchemaTableCall(callExpr);
-+const addTable = (declarator, table, tables, variableToTableMapping) => {
++const addTable = (declarator, table, tables, variableToTableMapping, context) => {
      if (table && declarator.id.type === 'Identifier') {
 -        tables[table.name] = table;
 -        variableToTableMapping[declarator.id.value] = table.name;
 +        const key = qualifiedTableName(table.schemaName, table.name);
 +        tables[key] = table;
++        context.declarationSpans[key] = declarator.span.start;
 +        variableToTableMapping[declarator.id.value] = key;
      }
  };
  /**
-@@ -89,38 +207,37 @@ const handlePgEnumCall = (declarator, callExpr, enums) => {
+@@ -89,38 +216,37 @@ const handlePgEnumCall = (declarator, callExpr, enums) => {
      }
  };
  /**
@@ -541,7 +550,7 @@ index 1c79a49e2e1aa8053a0836982ca1f06de6b9f1ec..e6d3d19cb79380622452806348c950ca
 +    const table = isSchemaTableCall(tableCall)
 +        ? parseSchemaTableCall(tableCall, context)
 +        : parsePgTableCall(tableCall, context);
-+    addTable(declarator, table, tables, variableToTableMapping);
++    addTable(declarator, table, tables, variableToTableMapping, context);
  };
  /**
   * Visit variable declarator to find pgTable, pgEnum, or relations calls
@@ -562,7 +571,7 @@ index 1c79a49e2e1aa8053a0836982ca1f06de6b9f1ec..e6d3d19cb79380622452806348c950ca
 -    else if (isSchemaTableCall(callExpr)) {
 -        handleSchemaTableCall(declarator, callExpr, tables, variableToTableMapping);
 +    else if (isCommentCall(callExpr)) {
-+        addTable(declarator, parsePgTableWithComment(callExpr, context), tables, variableToTableMapping);
++        addTable(declarator, parsePgTableWithComment(callExpr, context), tables, variableToTableMapping, context);
      }
      else if (isPgEnumCall(callExpr)) {
          handlePgEnumCall(declarator, callExpr, enums);
@@ -573,17 +582,17 @@ index 1c79a49e2e1aa8053a0836982ca1f06de6b9f1ec..e6d3d19cb79380622452806348c950ca
      }
  };
  /**
-@@ -128,17 +245,17 @@ const visitVariableDeclarator = (declarator, tables, enums, variableToTableMappi
+@@ -128,17 +254,17 @@ const visitVariableDeclarator = (declarator, tables, enums, variableToTableMappi
   */
  const parseDrizzleSchemaString = (schemaString) => {
      try {
 -        const { tables: drizzleTables, enums, variableToTableMapping, } = parseDrizzleSchema(schemaString);
-+        const { tables: drizzleTables, enums, variableToTableMapping, ignoredViews, } = parseDrizzleSchema(schemaString);
++        const { tables: drizzleTables, enums, variableToTableMapping, ignoredViews, declarationSpans, moduleSpanStart, } = parseDrizzleSchema(schemaString);
          const { tables, errors } = convertDrizzleTablesToInternal(drizzleTables, enums, variableToTableMapping);
          const convertedEnums = convertDrizzleEnumsToInternal(enums);
          return Promise.resolve({
 -            value: { tables, enums: convertedEnums, extensions: {} },
-+            value: { tables, enums: convertedEnums, extensions: {}, ignoredViews },
++            value: { tables, enums: convertedEnums, extensions: {}, ignoredViews, declarationSpans, moduleSpanStart },
              errors,
          });
      }

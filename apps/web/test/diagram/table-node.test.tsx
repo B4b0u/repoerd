@@ -4,7 +4,7 @@ import { cleanup, render } from '@testing-library/react'
 import { ReactFlowProvider } from '@xyflow/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { NodeDiff } from '../../src/features/diagram/model/diff-view'
-import { TableNode } from '../../src/features/diagram/TableNode'
+import { sameCard, TableNode } from '../../src/features/diagram/TableNode'
 
 afterEach(cleanup)
 
@@ -142,5 +142,19 @@ describe('TableNode in a comparison', () => {
     expect(container.querySelector('.table-node__overview-name')?.textContent).toBe(
       'order_itemsNew',
     )
+  })
+})
+
+describe('TableNode re-renders', () => {
+  it('only for its data or its selection, not for a Shift press (selectable) or a drag', () => {
+    const data = {} as Parameters<typeof TableNode>[0]['data']
+    const props = { id: 't', data, selected: false, selectable: false, dragging: false }
+    const card = (changes: object) =>
+      ({ ...props, ...changes }) as unknown as Parameters<typeof sameCard>[0]
+    expect(sameCard(card({}), card({ selectable: true, draggable: true, dragging: true }))).toBe(
+      true,
+    )
+    expect(sameCard(card({}), card({ selected: true }))).toBe(false)
+    expect(sameCard(card({}), card({ data: { ...data } }))).toBe(false)
   })
 })

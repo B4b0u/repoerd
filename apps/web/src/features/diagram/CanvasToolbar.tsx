@@ -1,6 +1,6 @@
 import { DISPLAY_MODES, type DisplayMode, isDisplayMode } from '@repoerd/model'
 import { Panel, useReactFlow, useViewport } from '@xyflow/react'
-import { LayoutGrid, Maximize, Minus, Plus } from 'lucide-react'
+import { LayoutGrid, Maximize, Minus, Plus, RefreshCw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { formatPercent } from '../../shared/i18n/format'
 import { toLanguage } from '../../shared/i18n/i18n'
@@ -15,13 +15,27 @@ import {
 } from '../../shared/ui/select'
 import { Separator } from '../../shared/ui/separator'
 import { Tabs, TabsList, TabsTrigger } from '../../shared/ui/tabs'
+import { CreateGroupHelp } from './groups/CreateGroupHelp'
+import { useGroupsTranslation } from './groups/groups-i18n'
 import type { HubLinksMode } from './hubs'
+
+/** The toolbar's group buttons; none without the right to edit the groups. */
+export interface GroupToolbarActions {
+  /**
+   * "Propose again from the files": its action, or 'unavailable' when the files propose nothing
+   * (shown greyed out, with the reason). Omitted while the proposals are already on screen.
+   */
+  repropose?: (() => void) | 'unavailable'
+  /** "Create a group", for a source without any group. */
+  createGroup?: boolean
+}
 
 interface Props {
   mode: DisplayMode
   onModeChange: (mode: DisplayMode) => void
   /** Omitted where the layout cannot be rearranged (related-tables view). */
   onRearrange?: () => void
+  groupActions?: GroupToolbarActions
   /** Resolved hub tables; the selector is shown only when this is non-empty. */
   hubs?: readonly string[]
   hubLinks?: Exclude<HubLinksMode, 'all'>
@@ -33,13 +47,16 @@ export function CanvasToolbar({
   mode,
   onModeChange,
   onRearrange,
+  groupActions = {},
   hubs,
   hubLinks,
   onHubLinksChange,
 }: Props) {
   const { t, i18n } = useTranslation('diagram')
+  const { t: tGroups } = useGroupsTranslation()
   const { zoomIn, zoomOut, fitView } = useReactFlow()
   const { zoom } = useViewport()
+  const { repropose, createGroup } = groupActions
   return (
     <Panel
       position="bottom-center"
@@ -66,6 +83,28 @@ export function CanvasToolbar({
           <LayoutGrid />
         </IconButton>
       )}
+      {repropose === 'unavailable' ? (
+        // Focusable, unlike a disabled button: its tooltip says why nothing can be proposed.
+        <IconButton
+          label={tGroups('repropose')}
+          tooltip={tGroups('reproposeUnavailable')}
+          aria-disabled
+          className="cursor-not-allowed opacity-50 hover:bg-transparent dark:hover:bg-transparent"
+        >
+          <RefreshCw />
+        </IconButton>
+      ) : (
+        repropose && (
+          <IconButton
+            label={tGroups('repropose')}
+            tooltip={tGroups('reproposeHint')}
+            onClick={repropose}
+          >
+            <RefreshCw />
+          </IconButton>
+        )
+      )}
+      {createGroup && <CreateGroupHelp />}
       <Separator orientation="vertical" className="mx-1 data-[orientation=vertical]:h-5" />
       <Select
         value={mode}

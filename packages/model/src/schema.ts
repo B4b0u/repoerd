@@ -60,6 +60,8 @@ export interface Table {
   columns: Column[]
   indexes: Index[]
   constraints: Constraint[]
+  /** Repo-relative path of the file that declares the table; absent when unknown. */
+  file?: string
 }
 
 export interface DbEnum {

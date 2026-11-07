@@ -30,6 +30,21 @@ describe('toDbSchema', () => {
     expect(Object.keys(schema.enums)).toEqual(['__proto__'])
   })
 
+  it('gives a table keyed __proto__ its declaration file', () => {
+    const tables = JSON.parse(
+      `{"__proto__": ${JSON.stringify(liamTable('__proto__'))}}`,
+    ) as LiamSchema['tables']
+
+    const schema = toDbSchema(
+      { tables, enums: {}, extensions: {} },
+      { declarationFiles: new Map([['__proto__', 'db/schema.ts']]) },
+    )
+
+    expect(Object.getOwnPropertyDescriptor(schema.tables, '__proto__')?.value?.file).toBe(
+      'db/schema.ts',
+    )
+  })
+
   it('names a table outside public `schema.table`, and a public one by its name', () => {
     const tables = {
       users: { ...liamTable('users'), schemaName: 'public' },

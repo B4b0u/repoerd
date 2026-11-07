@@ -168,6 +168,40 @@ describe('DiagramPage', () => {
     expect(urls.some((url) => url.endsWith('/branches'))).toBe(true)
   })
 
+  it('shows the refresh as busy while the table groups load', async () => {
+    renderPage('/acme/shop?branch=feature%2Fx', { kind: 'no-schema-found' }, ['feature/x'], {
+      failure: null,
+      selectedSourceId: 'prisma/schema.prisma',
+      schema: {
+        tables: {
+          users: {
+            name: 'users',
+            schema: null,
+            comment: null,
+            columns: [],
+            indexes: [],
+            constraints: [],
+          },
+        },
+        enums: {},
+        relationships: [],
+      },
+    })
+    const answer = vi.mocked(fetch).getMockImplementation()
+    vi.mocked(fetch).mockImplementation(async (url, init) => {
+      const requested = String(url)
+      if (requested.includes('/groups')) return new Promise<Response>(() => {})
+      if (requested.includes('/layout')) return Response.json({ positions: [] })
+      return (answer as typeof fetch)(url, init)
+    })
+    const refresh = await screen.findByRole('button', { name: 'Refresh from the repository' })
+    await screen.findByRole('complementary', { name: 'Tables' })
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    })
+    expect(refresh.getAttribute('aria-busy')).toBe('true')
+  })
+
   it('keeps the names of the secondary buttons when their text is hidden on narrow screens', async () => {
     renderPage('/acme/shop?branch=feature%2Fx', { kind: 'no-schema-found' })
     for (const control of [

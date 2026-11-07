@@ -177,6 +177,165 @@
   font-size: 15px;
 }
 
+/* Table groups: a stripe and a tint of the group's colour (the comparison's tints win). */
+.table-node--grouped::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 2;
+  width: 4px;
+  background: var(--group-stroke);
+  pointer-events: none;
+}
+
+.table-node--grouped .table-node__header {
+  background: color-mix(in srgb, var(--group-stroke) 14%, var(--header-bg));
+}
+
+.table-node__group-tag {
+  flex: none;
+  max-width: 45%;
+  margin-left: auto;
+  padding: 1px 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Group frames: in the canvas's coordinates, under the edges and the cards, never in the way. */
+/* Applies to any ViewportPortal content of this canvas: the group frames rely on it. No z-index
+   here: the frames and their labels each take their own place among the cards. */
+.diagram-canvas .react-flow__viewport-portal {
+  pointer-events: none;
+}
+
+.group-frame {
+  box-sizing: border-box;
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: -1;
+  border: 2px solid var(--group-stroke);
+  border-radius: 16px;
+  background: var(--group-fill);
+  pointer-events: none;
+}
+
+.group-frame--proposed {
+  border-style: dashed;
+}
+
+/* Inert text, or a button opening the group's editor with the push right; either way it can be
+   hovered (its title shows a long name in full). Placed on its frame through --frame-x,
+   --frame-y and --frame-width; drawn after the frames, under the cards. */
+.group-frame__label {
+  box-sizing: border-box;
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: -1;
+  max-width: calc(var(--frame-width) - 24px);
+  padding: 2px 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transform: translate(calc(var(--frame-x) + 12px), calc(var(--frame-y) + 4px));
+  pointer-events: auto;
+  cursor: default;
+}
+
+button.group-frame__label {
+  border: 0;
+  cursor: pointer;
+}
+
+/* Dragging a label moves its group's tables (a click still opens the editor). */
+.group-frame__label--movable {
+  cursor: grab;
+  touch-action: none;
+}
+
+.group-frame__label--movable:active {
+  cursor: grabbing;
+}
+
+/* A steady ring on screen, whatever the zoom. */
+button.group-frame__label:focus-visible {
+  outline: calc(2px / var(--canvas-zoom, 1)) solid var(--ring);
+  outline-offset: calc(2px / var(--canvas-zoom, 1));
+}
+
+/* Semantic zoom: the schema reads as a map of domains. The group names grow like the table
+   names, sit on top of their frame (growing upward, outside it) and above the cards, and are
+   bounded by the screen, not by the frame, which can be narrower than one word at this zoom. */
+.react-flow[data-overview] .group-frame__label {
+  z-index: 2000;
+  max-width: max(
+    calc(var(--frame-width) - 24px / var(--canvas-zoom, 1)),
+    calc(320px / var(--canvas-zoom, 1))
+  );
+  padding: calc(2px / var(--canvas-zoom, 1)) calc(8px / var(--canvas-zoom, 1));
+  font-size: calc(14px / var(--canvas-zoom, 1));
+  line-height: 1.2;
+  transform: translate(
+      calc(var(--frame-x) + 12px / var(--canvas-zoom, 1)),
+      calc(var(--frame-y) - 4px / var(--canvas-zoom, 1))
+    )
+    translateY(-100%);
+}
+
+/* A name that would overlap a larger group's at this zoom is left out, like on a map: it comes
+   back as the user zooms in. Still reachable with Tab (it shows while focused). */
+.react-flow[data-overview] .group-frame__label--crowded:not(:focus-visible) {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* A table name too small to read on its card, floating over it at a readable size (placed by
+   overview-labels.ts, which leaves out the names that would overlap). Under the group names. */
+.overview-label {
+  box-sizing: border-box;
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1500;
+  padding: calc(2px / var(--canvas-zoom, 1)) calc(6px / var(--canvas-zoom, 1));
+  overflow: hidden;
+  border: calc(1px / var(--canvas-zoom, 1)) solid var(--border);
+  border-radius: calc(4px / var(--canvas-zoom, 1));
+  background: var(--surface);
+  color: var(--text);
+  font-size: calc(12px / var(--canvas-zoom, 1));
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.overview-label--diff-added {
+  border-color: var(--diff-added);
+}
+
+.overview-label--diff-removed {
+  border-color: var(--diff-removed);
+}
+
+.overview-label--diff-modified {
+  border-color: var(--diff-modified);
+}
+
 /* Branch comparison: colour and symbol, never colour alone. */
 .table-node--diff-added {
   border-color: var(--diff-added);
@@ -221,6 +380,12 @@
   font-size: 11px;
   font-weight: 700;
   white-space: nowrap;
+}
+
+/* After a group tag, which already takes the free space. */
+.table-node__group-tag ~ .table-node__diff-label,
+.table-node__group-tag ~ .table-node__diff-counts {
+  margin-left: 0;
 }
 
 .table-node__diff-label--added,
@@ -326,6 +491,13 @@
 
 .table-node--dimmed {
   opacity: 0.35;
+}
+
+/* Selected for "Place into…": a ring set apart from the card (the active table has none), as
+   steady on screen as a focus ring whatever the zoom. */
+.table-node--selected {
+  outline: calc(3px / var(--canvas-zoom, 1)) solid var(--ring);
+  outline-offset: calc(3px / var(--canvas-zoom, 1));
 }
 
 .react-flow__edge.relationship-edge--highlighted .react-flow__edge-path {
