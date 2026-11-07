@@ -15,6 +15,7 @@ const viewOf = (membership: Record<string, string | null>): GroupView => ({
   groups: [{ id: 'g', name: 'G', color: '#000', origins: [] }],
   membership: new Map(Object.entries(membership)),
   canEdit: false,
+  loading: false,
 })
 
 describe('classifyMembers', () => {

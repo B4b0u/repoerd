@@ -73,11 +73,25 @@ describe('buildGroupView', () => {
 
   it('shows no group while the response is missing', () => {
     const view = buildGroupView(twoFiles, undefined)
-    expect(view).toMatchObject({ proposed: false, groups: [], canEdit: false })
+    expect(view).toMatchObject({ proposed: false, groups: [], canEdit: false, loading: false })
     expect([...view.membership.entries()]).toEqual([
       ['user', null],
       ['post', null],
     ])
+  })
+
+  it('tells a pending response from a failed one', () => {
+    expect(buildGroupView(twoFiles, undefined, { loading: true })).toMatchObject({
+      groups: [],
+      loading: true,
+    })
+    const response: TableGroupsResponse = {
+      configured: false,
+      groups: [],
+      assignments: {},
+      canEdit: true,
+    }
+    expect(buildGroupView(twoFiles, response).loading).toBe(false)
   })
 
   it('proposes from the compared branch alone and resolves the union against it', () => {
@@ -94,7 +108,7 @@ describe('buildGroupView', () => {
       assignments: {},
       canEdit: true,
     }
-    const view = buildGroupView(union, unconfigured, after)
+    const view = buildGroupView(union, unconfigured, { proposalSchema: after })
     // Same groups, ids and colours as the compared branch shown alone.
     expect(view.groups).toEqual(proposeGroups(after))
     expect(view.groups).toEqual(buildGroupView(after, unconfigured).groups)

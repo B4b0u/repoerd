@@ -27,6 +27,7 @@ const schema: DbSchema = {
 const groups: GroupView = {
   proposed: false,
   canEdit: false,
+  loading: false,
   groups: [
     { id: 'a', name: 'Support', color: '#3b82f6', origins: [] },
     { id: 'b', name: 'Accounts', color: '#ef4444', origins: [] },

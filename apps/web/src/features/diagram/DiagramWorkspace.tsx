@@ -82,11 +82,15 @@ function Workspace({
     [schema, viewState.active, viewState.focus, viewState.compact, hiddenKey, shownKey],
   )
   const { t } = useTranslation('compare')
-  // Loading or failed: no groups, the diagram shows as usual.
+  // Loading or failed: no groups, the diagram shows as usual (its first placement waits for them).
   const groupsQuery = useTableGroups(repo, sourceId)
   const groups = useMemo(
-    () => buildGroupView(schema, groupsQuery.data, proposalSchema),
-    [schema, groupsQuery.data, proposalSchema],
+    () =>
+      buildGroupView(schema, groupsQuery.data, {
+        proposalSchema,
+        loading: groupsQuery.isPending,
+      }),
+    [schema, groupsQuery.data, proposalSchema, groupsQuery.isPending],
   )
   const changedOnly = viewState.changed === true
   // Leaving the related view remounts the full canvas: it centres the table once placed.

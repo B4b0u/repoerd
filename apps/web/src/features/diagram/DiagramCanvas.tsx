@@ -193,12 +193,15 @@ export function DiagramCanvas({
   )
 
   // Tables are placed once per mount: a later layout refetch must not move tables the user has
-  // dragged since (pending drags may not be saved yet).
+  // dragged since (pending drags may not be saved yet). A first visit is laid out group by group:
+  // the placement waits for the groups (and goes without them if they fail to load).
   const placed = useRef(false)
+  const membership = groups?.membership
+  const groupsLoading = groups?.loading === true
   useEffect(() => {
-    if (!layout.data || placed.current) return
+    if (!layout.data || placed.current || groupsLoading) return
     let cancelled = false
-    placeTables(schema, layout.data.positions, mode).then(
+    placeTables(schema, layout.data.positions, mode, membership).then(
       ({ positions, added }) => {
         if (cancelled) return
         placed.current = true
@@ -213,7 +216,7 @@ export function DiagramCanvas({
     return () => {
       cancelled = true
     }
-  }, [layout.data, schema, mode, show, batcher, diff])
+  }, [layout.data, schema, mode, show, batcher, diff, membership, groupsLoading])
 
   const onNodeDragStop = useCallback(
     (_event: unknown, _node: TableFlowNode, dragged: TableFlowNode[]) => {
@@ -232,7 +235,7 @@ export function DiagramCanvas({
     batcher.cancel() // pending drags must not overwrite the new layout
     let laidOut: Map<string, Point>
     try {
-      laidOut = await layoutTables(schema, Object.keys(schema.tables), mode)
+      laidOut = await layoutTables(schema, Object.keys(schema.tables), mode, membership)
     } catch (error) {
       toast.error(placementFailureMessage(t, error))
       return

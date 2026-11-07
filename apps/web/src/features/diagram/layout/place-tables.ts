@@ -13,6 +13,7 @@ export async function placeTables(
   schema: DbSchema,
   saved: readonly TablePosition[],
   mode: DisplayMode = 'ALL_FIELDS',
+  membership?: ReadonlyMap<string, string | null>,
 ): Promise<Placement> {
   const savedByTable = new Map(saved.map((p) => [p.table, { x: p.x, y: p.y }]))
   const positions = new Map<string, Point>()
@@ -24,7 +25,8 @@ export async function placeTables(
   }
   if (missing.length === 0) return { positions, added: [] }
 
-  const laidOut = await layoutTables(schema, missing, mode)
+  // New tables keep coming in one block to the right of the others, laid out group by group.
+  const laidOut = await layoutTables(schema, missing, mode, membership)
   const origin = positions.size === 0 ? { x: 0, y: 0 } : rightOfExisting(schema, positions)
   const minX = Math.min(...[...laidOut.values()].map((p) => p.x))
   const minY = Math.min(...[...laidOut.values()].map((p) => p.y))
