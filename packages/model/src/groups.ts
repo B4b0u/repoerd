@@ -21,10 +21,12 @@ export interface TableGroupConfig {
 export const TABLE_GROUP_LIMITS = {
   groups: 100,
   name: 80,
-  origins: 50,
+  origins: 1000,
   originText: 512,
   tableName: 256,
   assignments: 5000,
+  /** Distinct configured schema sources per repository. */
+  sources: 50,
 } as const
 
 /** Attribution order of the group colours: 12 distinct, saturated, mid-lightness hues. */
@@ -216,3 +218,16 @@ export function withoutGroup(config: TableGroupConfig, groupId: string): TableGr
     ),
   }
 }
+
+/** Identity of an origin: its kind plus its path (file, folder) or name (pgSchema). */
+export const originKey = (origin: GroupOrigin): string =>
+  `${origin.kind}:${origin.kind === 'pgSchema' ? origin.name : origin.path}`
+
+/** Why the server refused a group write (`details.problem` of an `invalid-groups*` error). */
+export type TableGroupsProblem =
+  | 'unknown-group'
+  | 'too-many-groups'
+  | 'too-many-assignments'
+  | 'too-many-sources'
+  | 'duplicate-origin'
+  | 'invalid'

@@ -2,6 +2,7 @@ import {
   type DbSchema,
   type DetectedSource,
   type ManualSource,
+  originKey,
   TABLE_GROUP_LIMITS,
   type TableGroup,
   type TableGroupConfig,
@@ -95,16 +96,32 @@ export class InMemoryTableGroups implements TableGroupRepository {
       ? { configured: true, config: structuredClone(config) }
       : { configured: false, config: { groups: [], assignments: {} } }
   }
+  private capReached(repo: KnownRepo, sourceId: string): boolean {
+    if (this.stored.has(this.key(repo, sourceId))) return false
+    const prefix = `${repoKey(repo)}|`
+    const used = [...this.stored.keys()].filter((k) => k.startsWith(prefix)).length
+    return used >= TABLE_GROUP_LIMITS.sources
+  }
   async replace(repo: KnownRepo, sourceId: string, config: TableGroupConfig, _userId: string) {
+    if (this.capReached(repo, sourceId))
+      return { ok: false as const, error: 'too-many-sources' as const }
     this.stored.set(this.key(repo, sourceId), structuredClone(config))
+    return { ok: true as const }
   }
   async saveGroup(repo: KnownRepo, sourceId: string, group: TableGroup, _userId: string) {
+    if (this.capReached(repo, sourceId))
+      return { ok: false as const, error: 'too-many-sources' as const }
     const config = (await this.get(repo, sourceId)).config
     const at = config.groups.findIndex((g) => g.id === group.id)
     if (at >= 0) config.groups[at] = group
     else if (config.groups.length >= TABLE_GROUP_LIMITS.groups)
       return { ok: false as const, error: 'too-many-groups' as const }
     else config.groups.push(group)
+    const taken = new Set(group.origins.map(originKey))
+    for (const other of config.groups) {
+      if (other.id !== group.id)
+        other.origins = other.origins.filter((o) => !taken.has(originKey(o)))
+    }
     this.stored.set(this.key(repo, sourceId), config)
     return { ok: true as const }
   }
@@ -122,17 +139,21 @@ export class InMemoryTableGroups implements TableGroupRepository {
     sourceId: string,
     assignments: Record<string, string | null>,
     _userId: string,
+    clear: string[] = [],
   ) {
-    if (Object.keys(assignments).length === 0) return { ok: true as const }
+    if (Object.keys(assignments).length === 0 && clear.length === 0) return { ok: true as const }
+    if (this.capReached(repo, sourceId))
+      return { ok: false as const, error: 'too-many-sources' as const }
     const config = (await this.get(repo, sourceId)).config
     const known = new Set(config.groups.map((g) => g.id))
     if (Object.values(assignments).some((id) => id !== null && !known.has(id))) {
       return { ok: false as const, error: 'unknown-group' as const }
     }
-    const distinct = new Set([...Object.keys(config.assignments), ...Object.keys(assignments)])
-    if (distinct.size > TABLE_GROUP_LIMITS.assignments)
+    const next = { ...config.assignments, ...assignments }
+    for (const table of clear) delete next[table]
+    if (Object.keys(next).length > TABLE_GROUP_LIMITS.assignments)
       return { ok: false as const, error: 'too-many-assignments' as const }
-    Object.assign(config.assignments, assignments)
+    config.assignments = next
     this.stored.set(this.key(repo, sourceId), config)
     return { ok: true as const }
   }

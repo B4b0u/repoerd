@@ -137,6 +137,8 @@ describe('proposalId', () => {
 describe('constants', () => {
   it('exposes the limits and a 12 colour palette', () => {
     expect(TABLE_GROUP_LIMITS.groups).toBe(100)
+    expect(TABLE_GROUP_LIMITS.origins).toBe(1000)
+    expect(TABLE_GROUP_LIMITS.sources).toBe(50)
     expect(GROUP_PALETTE).toHaveLength(12)
     expect(new Set(GROUP_PALETTE).size).toBe(12)
     for (const c of GROUP_PALETTE) expect(c).toMatch(/^#[0-9a-f]{6}$/)

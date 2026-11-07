@@ -19,7 +19,7 @@ import { isValidBranchName } from '../../domain/branch-name.js'
 import { type LayoutError, validateSourceId } from '../../domain/layout.js'
 import type { KnownRepo } from '../../domain/repo.js'
 import { isValidRepoSegment } from '../../domain/repo-segment.js'
-import { isValidGroupId } from '../../domain/table-groups.js'
+import { isValidGroupId, type TableGroupsError } from '../../domain/table-groups.js'
 import { accessError, apiError, manualSourcesMessage, repoNotFound } from '../errors.js'
 import { readBody } from '../read-body.js'
 import {
@@ -300,8 +300,15 @@ export function registerRepoRoutes(app: AppHono, deps: AppDeps) {
   const missingGroupsTarget = (c: AppContext) =>
     apiError(c, 400, 'bad_request', MISSING_GROUPS_TARGET, { reason: 'invalid-groups-target' })
 
-  const invalidGroups = (c: AppContext, message: string) =>
-    apiError(c, 400, 'bad_request', message, { reason: 'invalid-groups' })
+  /** A refused group write: `reason` is invalid-groups (or invalid-groups-target), `problem` says why. */
+  const invalidGroups = (c: AppContext, error: TableGroupsError) =>
+    apiError(c, 400, 'bad_request', error.message, {
+      reason: error.kind,
+      problem: error.problem,
+    })
+
+  const invalidGroupId = (c: AppContext) =>
+    invalidGroups(c, { kind: 'invalid-groups', message: 'Invalid group id', problem: 'invalid' })
 
   const invalidGroupsBody = (c: AppContext) =>
     apiError(c, 400, 'bad_request', 'Invalid groups body', { reason: 'invalid-body' })
@@ -333,7 +340,7 @@ export function registerRepoRoutes(app: AppHono, deps: AppDeps) {
     const body = await readBody(c, replaceTableGroupsBodySchema)
     if (!body) return invalidGroupsBody(c)
     const result = await deps.tableGroups.replace(repo, sourceId, body, c.get('user').id)
-    if (!result.ok) return invalidGroups(c, result.error.message)
+    if (!result.ok) return invalidGroups(c, result.error)
     return c.json({
       configured: true,
       groups: result.value.config.groups,
@@ -350,7 +357,7 @@ export function registerRepoRoutes(app: AppHono, deps: AppDeps) {
     const sourceId = groupsSource(c)
     if (!sourceId) return missingGroupsTarget(c)
     const groupId = c.req.param('groupId')
-    if (!isValidGroupId(groupId)) return invalidGroups(c, 'Invalid group id')
+    if (!isValidGroupId(groupId)) return invalidGroupId(c)
     const body = await readBody(c, tableGroupBodySchema)
     if (!body) return invalidGroupsBody(c)
     const result = await deps.tableGroups.saveGroup(
@@ -359,7 +366,7 @@ export function registerRepoRoutes(app: AppHono, deps: AppDeps) {
       { id: groupId, ...body },
       c.get('user').id,
     )
-    if (!result.ok) return invalidGroups(c, result.error.message)
+    if (!result.ok) return invalidGroups(c, result.error)
     return c.body(null, 204)
   })
 
@@ -371,7 +378,7 @@ export function registerRepoRoutes(app: AppHono, deps: AppDeps) {
     const sourceId = groupsSource(c)
     if (!sourceId) return missingGroupsTarget(c)
     const groupId = c.req.param('groupId')
-    if (!isValidGroupId(groupId)) return invalidGroups(c, 'Invalid group id')
+    if (!isValidGroupId(groupId)) return invalidGroupId(c)
     await deps.tableGroups.deleteGroup(repo, sourceId, groupId, c.get('user').id)
     return c.body(null, 204)
   })
@@ -385,8 +392,14 @@ export function registerRepoRoutes(app: AppHono, deps: AppDeps) {
     if (!sourceId) return missingGroupsTarget(c)
     const body = await readBody(c, placeTablesBodySchema)
     if (!body) return invalidGroupsBody(c)
-    const result = await deps.tableGroups.place(repo, sourceId, body.assignments, c.get('user').id)
-    if (!result.ok) return invalidGroups(c, result.error.message)
+    const result = await deps.tableGroups.place(
+      repo,
+      sourceId,
+      body.assignments,
+      body.clear,
+      c.get('user').id,
+    )
+    if (!result.ok) return invalidGroups(c, result.error)
     return c.body(null, 204)
   })
 }

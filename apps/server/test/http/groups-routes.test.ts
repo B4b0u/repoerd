@@ -295,4 +295,78 @@ describe('table group routes', () => {
     const read = await app.request(apiPaths.groups(shop, source))
     expect(await read.json()).toMatchObject({ configured: false, canEdit: true })
   })
+
+  it('clear a manual placement through PATCH, and refuse a table in both lists', async () => {
+    const world = buildRealModeApp()
+    const cookie = await world.signIn()
+    await world.app.request(
+      apiPaths.groups(shop, source),
+      jsonRequest('PUT', { groups: [billing], assignments: { users: 'billing', p: null } }, cookie),
+    )
+    const patch = (body: unknown) =>
+      world.app.request(apiPaths.groupAssignments(shop, source), jsonRequest('PATCH', body, cookie))
+    expect((await patch({ assignments: { o: 'billing' }, clear: ['users'] })).status).toBe(204)
+    expect((await world.tableGroups.get(repoKey, source)).config.assignments).toEqual({
+      p: null,
+      o: 'billing',
+    })
+    const both = await patch({ assignments: { o: null }, clear: ['o'] })
+    expect(both.status).toBe(400)
+    expect(await both.json()).toMatchObject({
+      error: { details: { reason: 'invalid-groups', problem: 'invalid' } },
+    })
+  })
+
+  it('give a problem detail for an unknown group and a duplicated origin', async () => {
+    const world = buildRealModeApp()
+    const cookie = await world.signIn()
+    const unknown = await world.app.request(
+      apiPaths.groupAssignments(shop, source),
+      jsonRequest('PATCH', { assignments: { t: 'ghost' } }, cookie),
+    )
+    expect(await unknown.json()).toMatchObject({
+      error: { details: { reason: 'invalid-groups', problem: 'unknown-group' } },
+    })
+    const o = { kind: 'file', path: 'a.ts' }
+    const dup = await world.app.request(
+      apiPaths.groups(shop, source),
+      jsonRequest(
+        'PUT',
+        {
+          groups: [
+            { ...billing, origins: [o] },
+            { ...auth, origins: [o] },
+          ],
+          assignments: {},
+        },
+        cookie,
+      ),
+    )
+    expect(dup.status).toBe(400)
+    expect(await dup.json()).toMatchObject({
+      error: { details: { reason: 'invalid-groups', problem: 'duplicate-origin' } },
+    })
+  })
+
+  it('refuse a 51st configured source with invalid-groups-target', async () => {
+    const world = buildRealModeApp({
+      userRateLimit: createRateLimiter({ limit: 10_000, windowMs: 60_000 }),
+    })
+    const cookie = await world.signIn()
+    for (let i = 0; i < 50; i++) {
+      const ok = await world.app.request(
+        apiPaths.group(shop, `s${i}`, 'billing'),
+        jsonRequest('PUT', billingBody, cookie),
+      )
+      expect(ok.status).toBe(204)
+    }
+    const extra = await world.app.request(
+      apiPaths.group(shop, 'extra', 'billing'),
+      jsonRequest('PUT', billingBody, cookie),
+    )
+    expect(extra.status).toBe(400)
+    expect(await extra.json()).toMatchObject({
+      error: { details: { reason: 'invalid-groups-target', problem: 'too-many-sources' } },
+    })
+  })
 })

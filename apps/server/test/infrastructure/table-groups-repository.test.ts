@@ -159,4 +159,75 @@ describe('SqliteTableGroupRepository', () => {
     const renamed = { ...repo, owner: 'New', name: 'Name' }
     expect((await groups.get(renamed, source)).config.groups).toEqual([group('a')])
   })
+
+  it('clears a placement so the table follows its origin again', async () => {
+    await groups.saveGroup(repo, source, group('a'), 'alice')
+    await groups.place(repo, source, { users: 'a', logs: null, orders: 'a' }, 'alice')
+    expect(await groups.place(repo, source, {}, 'alice', ['users', 'logs', 'ghost'])).toEqual({
+      ok: true,
+    })
+    expect((await groups.get(repo, source)).config.assignments).toEqual({ orders: 'a' })
+  })
+
+  it('mixes clear and place in one call', async () => {
+    await groups.saveGroup(repo, source, group('a'), 'alice')
+    await groups.place(repo, source, { users: 'a' }, 'alice')
+    await groups.place(repo, source, { posts: 'a' }, 'alice', ['users'])
+    expect((await groups.get(repo, source)).config.assignments).toEqual({ posts: 'a' })
+  })
+
+  it('counts removals in the 5,000 placements cap', async () => {
+    await groups.saveGroup(repo, source, group('a'), 'alice')
+    const tables = (from: number, to: number) =>
+      Object.fromEntries(Array.from({ length: to - from }, (_, i) => [`t${from + i}`, 'a']))
+    await groups.place(repo, source, tables(0, 5000), 'alice')
+    expect(await groups.place(repo, source, { extra: 'a' }, 'alice', ['t0'])).toEqual({ ok: true })
+    expect(await groups.place(repo, source, { more: 'a' }, 'alice', ['ghost'])).toEqual({
+      ok: false,
+      error: 'too-many-assignments',
+    })
+    expect(Object.keys((await groups.get(repo, source)).config.assignments)).toHaveLength(5000)
+  })
+
+  it('writes nothing when place and clear are both empty', async () => {
+    expect(await groups.place(repo, source, {}, 'alice', [])).toEqual({ ok: true })
+    expect((await groups.get(repo, source)).configured).toBe(false)
+  })
+
+  it('moves an origin to the saved group: other groups lose it, nothing else changes', async () => {
+    const file = { kind: 'file' as const, path: 'a.ts' }
+    const folder = { kind: 'folder' as const, path: 'src' }
+    await groups.saveGroup(repo, source, group('a', { origins: [file, folder] }), 'alice')
+    await groups.saveGroup(repo, source, group('c', { name: 'Keep', origins: [folder] }), 'alice')
+    // 'c' took the folder from 'a'.
+    await groups.saveGroup(repo, source, group('b', { origins: [file] }), 'alice')
+    const stored = (await groups.get(repo, source)).config.groups
+    expect(stored).toEqual([
+      group('a', { origins: [] }),
+      group('c', { name: 'Keep', origins: [folder] }),
+      group('b', { origins: [file] }),
+    ])
+  })
+
+  it('caps the configured sources of a repository at 50', async () => {
+    for (let i = 0; i < 50; i++) await groups.saveGroup(repo, `s${i}`, group('a'), 'alice')
+    expect(await groups.saveGroup(repo, 'extra', group('a'), 'alice')).toEqual({
+      ok: false,
+      error: 'too-many-sources',
+    })
+    expect(await groups.place(repo, 'extra', { t: null }, 'alice')).toEqual({
+      ok: false,
+      error: 'too-many-sources',
+    })
+    expect(await groups.replace(repo, 'extra', { groups: [], assignments: {} }, 'alice')).toEqual({
+      ok: false,
+      error: 'too-many-sources',
+    })
+    expect((await groups.get(repo, 'extra')).configured).toBe(false)
+    // Existing sources keep working, and another repository has its own budget.
+    expect(await groups.saveGroup(repo, 's3', group('z'), 'alice')).toEqual({ ok: true })
+    expect(await groups.saveGroup({ ...repo, id: 8 }, 'extra', group('a'), 'alice')).toEqual({
+      ok: true,
+    })
+  })
 })

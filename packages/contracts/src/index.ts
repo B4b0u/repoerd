@@ -8,6 +8,7 @@ import type {
   SchemaFormat,
   SourceProblem,
   TableGroup,
+  TableGroupsProblem,
   TablePosition,
 } from '@repoerd/model'
 import { z } from 'zod'
@@ -319,6 +320,8 @@ export type ApiErrorReason =
 /** The reason, and the values the message is about (branch, login, source name, path, limit…). */
 export interface ApiErrorDetails {
   reason?: ApiErrorReason
+  /** Of the `invalid-groups*` reasons: what exactly was refused. */
+  problem?: TableGroupsProblem
   [value: string]: string | number | undefined
 }
 

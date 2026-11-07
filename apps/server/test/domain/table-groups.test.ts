@@ -2,6 +2,7 @@ import type { TableGroup } from '@repoerd/model'
 import { describe, expect, it } from 'vitest'
 import {
   validateAssignments,
+  validatePlacement,
   validateTableGroup,
   validateTableGroupConfig,
 } from '../../src/domain/table-groups.js'
@@ -42,13 +43,13 @@ describe('validateTableGroup', () => {
     expect(validateTableGroup(group({ id: 'Ab_-9'.repeat(12) })).ok).toBe(true)
   })
 
-  it('limits origins to 50, of at most 512 characters', () => {
+  it('limits origins to 1000, of at most 512 characters', () => {
     const file = (i: number) => ({ kind: 'file' as const, path: `f${i}.ts` })
     expect(
-      validateTableGroup(group({ origins: Array.from({ length: 50 }, (_, i) => file(i)) })).ok,
+      validateTableGroup(group({ origins: Array.from({ length: 1000 }, (_, i) => file(i)) })).ok,
     ).toBe(true)
     expect(
-      validateTableGroup(group({ origins: Array.from({ length: 51 }, (_, i) => file(i)) })).ok,
+      validateTableGroup(group({ origins: Array.from({ length: 1001 }, (_, i) => file(i)) })).ok,
     ).toBe(false)
     expect(
       validateTableGroup(group({ origins: [{ kind: 'folder', path: 'a'.repeat(513) }] })).ok,
@@ -102,5 +103,43 @@ describe('validateTableGroupConfig', () => {
       ok: true,
       value: { groups: [group({ name: 'B', color: '#aabbcc' })], assignments: {} },
     })
+  })
+})
+
+describe('validateTableGroupConfig origins', () => {
+  it('refuses the same origin in two groups, with the duplicate-origin problem', () => {
+    const o = { kind: 'file' as const, path: 'a.ts' }
+    const result = validateTableGroupConfig({
+      groups: [group({ id: 'a', origins: [o] }), group({ id: 'b', origins: [o] })],
+      assignments: {},
+    })
+    expect(result).toMatchObject({ ok: false, error: { problem: 'duplicate-origin' } })
+    // Same path with another kind is a different origin.
+    expect(
+      validateTableGroupConfig({
+        groups: [
+          group({ id: 'a', origins: [o] }),
+          group({ id: 'b', origins: [{ kind: 'folder', path: 'a.ts' }] }),
+        ],
+        assignments: {},
+      }).ok,
+    ).toBe(true)
+  })
+})
+
+describe('validatePlacement', () => {
+  it('accepts placements and clears, refuses a table in both', () => {
+    expect(validatePlacement({ a: 'x' }, ['b']).ok).toBe(true)
+    expect(validatePlacement({ a: 'x' }, ['a'])).toMatchObject({
+      ok: false,
+      error: { kind: 'invalid-groups', problem: 'invalid' },
+    })
+  })
+
+  it('bounds the clear list by count and table-name length', () => {
+    const many = Array.from({ length: 5001 }, (_, i) => `t${i}`)
+    expect(validatePlacement({}, many)).toMatchObject({ ok: false })
+    expect(validatePlacement({}, [''])).toMatchObject({ ok: false })
+    expect(validatePlacement({}, ['t'.repeat(257)])).toMatchObject({ ok: false })
   })
 })

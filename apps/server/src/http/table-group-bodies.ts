@@ -21,4 +21,6 @@ export const replaceTableGroupsBodySchema = z.object({
 
 export const placeTablesBodySchema = z.object({
   assignments: z.record(z.string(), z.string().nullable()),
+  /** Tables whose manual placement is deleted (they follow their origin again). */
+  clear: z.array(z.string()).optional(),
 })

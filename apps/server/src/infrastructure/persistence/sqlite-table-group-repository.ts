@@ -1,5 +1,10 @@
-import { TABLE_GROUP_LIMITS, type TableGroup, type TableGroupConfig } from '@repoerd/model'
-import { and, asc, count, eq, inArray, sql } from 'drizzle-orm'
+import {
+  originKey,
+  TABLE_GROUP_LIMITS,
+  type TableGroup,
+  type TableGroupConfig,
+} from '@repoerd/model'
+import { and, asc, count, eq, inArray, ne, sql } from 'drizzle-orm'
 import type {
   StoredTableGroups,
   TableGroupRepository,
@@ -39,9 +44,16 @@ export class SqliteTableGroupRepository implements TableGroupRepository {
     return { configured, config: { groups, assignments } }
   }
 
-  async replace(repo: KnownRepo, sourceId: string, config: TableGroupConfig, userId: string) {
+  async replace(
+    repo: KnownRepo,
+    sourceId: string,
+    config: TableGroupConfig,
+    userId: string,
+  ): Promise<{ ok: true } | { ok: false; error: 'too-many-sources' }> {
     const key = repoKey(repo)
-    this.db.transaction((tx) => {
+    return this.db.transaction((tx) => {
+      if (this.sourceCapReached(tx, key, sourceId))
+        return { ok: false, error: 'too-many-sources' } as const
       tx.delete(tableGroups)
         .where(and(eq(tableGroups.repo, key), eq(tableGroups.sourceId, sourceId)))
         .run()
@@ -71,6 +83,7 @@ export class SqliteTableGroupRepository implements TableGroupRepository {
       }))
       for (const rows of chunk(placementRows)) tx.insert(tableGroupAssignments).values(rows).run()
       this.markConfigured(tx, key, sourceId, userId)
+      return { ok: true } as const
     })
   }
 
@@ -79,9 +92,11 @@ export class SqliteTableGroupRepository implements TableGroupRepository {
     sourceId: string,
     group: TableGroup,
     userId: string,
-  ): Promise<{ ok: true } | { ok: false; error: 'too-many-groups' }> {
+  ): Promise<{ ok: true } | { ok: false; error: 'too-many-groups' | 'too-many-sources' }> {
     const key = repoKey(repo)
     return this.db.transaction((tx) => {
+      if (this.sourceCapReached(tx, key, sourceId))
+        return { ok: false, error: 'too-many-sources' } as const
       const inSource = and(eq(tableGroups.repo, key), eq(tableGroups.sourceId, sourceId))
       const exists =
         tx
@@ -120,6 +135,21 @@ export class SqliteTableGroupRepository implements TableGroupRepository {
           set: fields,
         })
         .run()
+      // One owner per origin: the saved group takes its origins from the other groups.
+      const taken = new Set(group.origins.map(originKey))
+      const others = tx
+        .select({ id: tableGroups.groupId, origins: tableGroups.origins })
+        .from(tableGroups)
+        .where(and(inSource, ne(tableGroups.groupId, group.id)))
+        .all()
+      for (const other of others) {
+        const kept = other.origins.filter((o) => !taken.has(originKey(o)))
+        if (kept.length === other.origins.length) continue
+        tx.update(tableGroups)
+          .set({ origins: kept })
+          .where(and(inSource, eq(tableGroups.groupId, other.id)))
+          .run()
+      }
       this.markConfigured(tx, key, sourceId, userId)
       return { ok: true } as const
     })
@@ -157,11 +187,20 @@ export class SqliteTableGroupRepository implements TableGroupRepository {
     sourceId: string,
     assignments: Record<string, string | null>,
     userId: string,
-  ): Promise<{ ok: true } | { ok: false; error: 'unknown-group' | 'too-many-assignments' }> {
-    if (Object.keys(assignments).length === 0) return { ok: true }
+    clear: string[] = [],
+  ): Promise<
+    | { ok: true }
+    | { ok: false; error: 'unknown-group' | 'too-many-assignments' | 'too-many-sources' }
+  > {
+    if (Object.keys(assignments).length === 0 && clear.length === 0) return { ok: true }
     const key = repoKey(repo)
-    const wanted = [...new Set(Object.values(assignments).filter((id) => id !== null))]
+    const cleared = new Set(clear)
+    // `clear` wins over a placement of the same table.
+    const placed = Object.fromEntries(Object.entries(assignments).filter(([t]) => !cleared.has(t)))
+    const wanted = [...new Set(Object.values(placed).filter((id) => id !== null))]
     return this.db.transaction((tx) => {
+      if (this.sourceCapReached(tx, key, sourceId))
+        return { ok: false, error: 'too-many-sources' } as const
       const known = new Set<string>()
       for (const ids of chunk(wanted)) {
         const rows = tx
@@ -182,20 +221,30 @@ export class SqliteTableGroupRepository implements TableGroupRepository {
         eq(tableGroupAssignments.repo, key),
         eq(tableGroupAssignments.sourceId, sourceId),
       )
+      const countIn = (names: string[]) => {
+        let total = 0
+        for (const part of chunk(names)) {
+          total +=
+            tx
+              .select({ n: count() })
+              .from(tableGroupAssignments)
+              .where(and(inSource, inArray(tableGroupAssignments.tableName, part)))
+              .get()?.n ?? 0
+        }
+        return total
+      }
       const stored =
         tx.select({ n: count() }).from(tableGroupAssignments).where(inSource).get()?.n ?? 0
-      let alreadyPlaced = 0
-      for (const names of chunk(Object.keys(assignments))) {
-        alreadyPlaced +=
-          tx
-            .select({ n: count() })
-            .from(tableGroupAssignments)
-            .where(and(inSource, inArray(tableGroupAssignments.tableName, names)))
-            .get()?.n ?? 0
-      }
-      if (stored + Object.keys(assignments).length - alreadyPlaced > TABLE_GROUP_LIMITS.assignments)
+      const incoming = Object.keys(placed)
+      const after = stored - countIn([...cleared]) + incoming.length - countIn(incoming)
+      if (after > TABLE_GROUP_LIMITS.assignments)
         return { ok: false, error: 'too-many-assignments' } as const
-      const rows = Object.entries(assignments).map(([tableName, groupId]) => ({
+      for (const names of chunk([...cleared])) {
+        tx.delete(tableGroupAssignments)
+          .where(and(inSource, inArray(tableGroupAssignments.tableName, names)))
+          .run()
+      }
+      const rows = Object.entries(placed).map(([tableName, groupId]) => ({
         repo: key,
         sourceId,
         tableName,
@@ -217,6 +266,20 @@ export class SqliteTableGroupRepository implements TableGroupRepository {
       this.markConfigured(tx, key, sourceId, userId)
       return { ok: true } as const
     })
+  }
+
+  /** True when the source is not configured yet and the repository already holds the maximum. */
+  private sourceCapReached(tx: Tx, key: string, sourceId: string): boolean {
+    const own = tx
+      .select({ repo: tableGroupConfigs.repo })
+      .from(tableGroupConfigs)
+      .where(and(eq(tableGroupConfigs.repo, key), eq(tableGroupConfigs.sourceId, sourceId)))
+      .get()
+    if (own !== undefined) return false
+    const total =
+      tx.select({ n: count() }).from(tableGroupConfigs).where(eq(tableGroupConfigs.repo, key)).get()
+        ?.n ?? 0
+    return total >= TABLE_GROUP_LIMITS.sources
   }
 
   private markConfigured(tx: Tx, key: string, sourceId: string, userId: string) {
