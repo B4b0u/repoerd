@@ -1,4 +1,4 @@
-import type { NodeHighlight, RelationshipFlowEdge, TableFlowNode } from './to-flow'
+import type { NodeGroup, NodeHighlight, RelationshipFlowEdge, TableFlowNode } from './to-flow'
 
 interface Link {
   source: string
@@ -20,6 +20,8 @@ export interface HighlightInput {
   hidden: ReadonlySet<string>
   /** Relationship edge ids whose hub links are hidden, unless they touch the focused table. */
   hiddenHubEdges?: ReadonlySet<string>
+  /** Group of each grouped table. */
+  groups?: ReadonlyMap<string, NodeGroup>
 }
 
 function columnFromTargetHandle(handle: string | null | undefined): string | undefined {
@@ -57,11 +59,19 @@ function sameHubBadges(
   return keys.every((key) => a[key] === b[key])
 }
 
+const sameGroup = (a: NodeGroup | undefined, b: NodeGroup | undefined): boolean =>
+  a === b ||
+  (a !== undefined &&
+    b !== undefined &&
+    a.name === b.name &&
+    a.far === b.far &&
+    a.colors === b.colors)
+
 /** Derives what the canvas displays from the flow and the current interaction state. */
 export function highlightFlow(
   nodes: TableFlowNode[],
   edges: RelationshipFlowEdge[],
-  { active, hovered, hidden, hiddenHubEdges }: HighlightInput,
+  { active, hovered, hidden, hiddenHubEdges, groups }: HighlightInput,
 ): { nodes: TableFlowNode[]; edges: RelationshipFlowEdge[] } {
   const ids = new Set(nodes.map((node) => node.id))
   const focus = [hovered, active].find(
@@ -85,6 +95,7 @@ export function highlightFlow(
   return {
     nodes: nodes.map((node) => {
       const hubBadges = badges.get(node.id)
+      const group = groups?.get(node.id)
       return {
         ...node,
         hidden: hidden.has(node.id),
@@ -92,6 +103,7 @@ export function highlightFlow(
           ...node.data,
           highlight: stateOf(node.id),
           ...(hubBadges ? { hubBadges } : {}),
+          ...(group ? { group } : {}),
         },
       }
     }),
@@ -146,7 +158,8 @@ export function createHighlighter() {
           (a, b) =>
             a.hidden === b.hidden &&
             a.data.highlight === b.data.highlight &&
-            sameHubBadges(a.data.hubBadges, b.data.hubBadges),
+            sameHubBadges(a.data.hubBadges, b.data.hubBadges) &&
+            sameGroup(a.data.group, b.data.group),
         ),
       ),
       edges: fresh.edges.map((edge, i) =>

@@ -177,6 +177,76 @@
   font-size: 15px;
 }
 
+/* Table groups: a stripe and a tint of the group's colour (the comparison's tints win). */
+.table-node--grouped::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 2;
+  width: 4px;
+  background: var(--group-stroke);
+  pointer-events: none;
+}
+
+.table-node--grouped .table-node__header {
+  background: color-mix(in srgb, var(--group-stroke) 14%, var(--header-bg));
+}
+
+.table-node__group-tag {
+  flex: none;
+  max-width: 45%;
+  margin-left: auto;
+  padding: 1px 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Group frames: in the canvas's coordinates, under the edges and the cards, never in the way. */
+.diagram-canvas .react-flow__viewport-portal {
+  z-index: -1;
+  pointer-events: none;
+}
+
+.group-frame {
+  box-sizing: border-box;
+  position: absolute;
+  top: 0;
+  left: 0;
+  border: 2px solid var(--group-stroke);
+  border-radius: 16px;
+  background: var(--group-fill);
+  pointer-events: none;
+}
+
+.group-frame--proposed {
+  border-style: dashed;
+}
+
+/* Inert for now, but it can be hovered (its title shows a long name in full). */
+.group-frame__label {
+  position: absolute;
+  top: 4px;
+  left: 12px;
+  max-width: calc(100% - 24px);
+  padding: 2px 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: auto;
+  cursor: default;
+}
+
 /* Branch comparison: colour and symbol, never colour alone. */
 .table-node--diff-added {
   border-color: var(--diff-added);
@@ -221,6 +291,12 @@
   font-size: 11px;
   font-weight: 700;
   white-space: nowrap;
+}
+
+/* After a group tag, which already takes the free space. */
+.table-node__group-tag ~ .table-node__diff-label,
+.table-node__group-tag ~ .table-node__diff-counts {
+  margin-left: 0;
 }
 
 .table-node__diff-label--added,

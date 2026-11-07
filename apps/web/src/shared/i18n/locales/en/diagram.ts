@@ -104,4 +104,9 @@ export const diagram = {
     none: 'No related table',
     open: 'Open in main view',
   },
+  groups: {
+    proposed_one: '{{count}} group proposed from the schema files',
+    proposed_other: '{{count}} groups proposed from the schema files',
+    tag: 'Group: {{name}}',
+  },
 }

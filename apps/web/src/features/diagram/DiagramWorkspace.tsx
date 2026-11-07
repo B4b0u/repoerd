@@ -13,6 +13,8 @@ import { ChangesPanel } from '../compare/ChangesPanel'
 import { TableDetailPanel } from '../table-detail/TableDetailPanel'
 import { TableListPane } from '../table-list/TableListPane'
 import { DiagramCanvas } from './DiagramCanvas'
+import { useTableGroups } from './groups/api'
+import { buildGroupView } from './groups/group-view'
 import { hiddenHubRelationships, hubViewSchema, resolveHubs } from './hubs'
 import { relatedTableNames } from './layout/related'
 import { canvasHiddenTables, changedTables } from './model/diff-view'
@@ -77,6 +79,9 @@ function Workspace({
     [schema, viewState.active, viewState.focus, viewState.compact, hiddenKey, shownKey],
   )
   const { t } = useTranslation('compare')
+  // Loading or failed: no groups, the diagram shows as usual.
+  const groupsQuery = useTableGroups(repo, sourceId)
+  const groups = useMemo(() => buildGroupView(schema, groupsQuery.data), [schema, groupsQuery.data])
   const changedOnly = viewState.changed === true
   // Leaving the related view remounts the full canvas: it centres the table once placed.
   const [centerAfterRemount, setCenterAfterRemount] = useState<string>()
@@ -212,6 +217,7 @@ function Workspace({
             hubs={hubs}
             hubLinks={viewState.hubLinks}
             onHubLinksChange={changeHubLinks}
+            groups={groups}
           />
         ) : (
           <DiagramCanvas
@@ -232,6 +238,7 @@ function Workspace({
             hubs={hubs}
             hubLinks={viewState.hubLinks}
             onHubLinksChange={changeHubLinks}
+            groups={groups}
           />
         )}
       </div>

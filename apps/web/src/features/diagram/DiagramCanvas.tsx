@@ -20,6 +20,8 @@ import {
 import { PageMessage } from '../../shared/ui/PageMessage'
 import { type SaveOutcome, saveLayout, savePositions, trackLayoutSave, useLayout } from './api'
 import { FlowCanvas } from './FlowCanvas'
+import { GroupsBanner } from './groups/GroupsBanner'
+import type { GroupView } from './groups/group-view'
 import { layoutTables } from './layout/auto-layout'
 import { placeTables } from './layout/place-tables'
 import {
@@ -54,6 +56,7 @@ interface Props {
   hubs?: readonly string[]
   hubLinks?: 'none' | 'first'
   onHubLinksChange?: (hubLinks: 'none' | 'first' | undefined) => void
+  groups?: GroupView
 }
 
 const LAYOUT_TOAST_ID = 'layout-save-failed'
@@ -100,6 +103,7 @@ export function DiagramCanvas({
   hubs,
   hubLinks,
   onHubLinksChange,
+  groups,
 }: Props) {
   const layout = useLayout(repo, sourceId, mode, inheritLayout)
   const [nodes, setNodes, onNodesChange] = useNodesState<TableFlowNode>([])
@@ -283,7 +287,10 @@ export function DiagramCanvas({
         hubs={hubs}
         hubLinks={hubLinks}
         onHubLinksChange={onHubLinksChange}
-      />
+        groups={groups}
+      >
+        {groups?.proposed && <GroupsBanner count={groups.groups.length} />}
+      </FlowCanvas>
       <AlertDialog open={confirmingRearrange} onOpenChange={setConfirmingRearrange}>
         <AlertDialogContent>
           <AlertDialogHeader>

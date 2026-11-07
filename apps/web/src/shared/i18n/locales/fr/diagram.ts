@@ -107,4 +107,9 @@ export const diagram: Catalog['diagram'] = {
     none: 'Aucune table liée',
     open: 'Ouvrir dans la vue principale',
   },
+  groups: {
+    proposed_one: "{{count}} groupe proposé d'après les fichiers du schéma",
+    proposed_other: "{{count}} groupes proposés d'après les fichiers du schéma",
+    tag: 'Groupe : {{name}}',
+  },
 }

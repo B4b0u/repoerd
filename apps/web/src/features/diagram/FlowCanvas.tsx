@@ -13,6 +13,8 @@ import { useThemeContext } from '../../shared/theme/theme-context'
 import { CanvasToolbar } from './CanvasToolbar'
 import { useFlowAriaLabels } from './flow-aria'
 import { edgeTypes, nodeTypes } from './flow-types'
+import { GroupFrames, useGroupDisplay } from './groups/GroupFrames'
+import type { GroupView } from './groups/group-view'
 import type { HubLinksMode } from './hubs'
 import { minimapColor } from './model/diff-view'
 import { createHighlighter } from './model/highlight'
@@ -35,6 +37,9 @@ interface Props {
   hubs?: readonly string[]
   hubLinks?: Exclude<HubLinksMode, 'all'>
   onHubLinksChange?: (hubLinks: Exclude<HubLinksMode, 'all'> | undefined) => void
+  /** Table groups: their colour on the cards, and their frames unless `frames` is false. */
+  groups?: GroupView
+  frames?: boolean
   /** Overlays rendered above the canvas (banners, warnings). */
   children?: ReactNode
 }
@@ -54,15 +59,19 @@ export function FlowCanvas({
   hubs,
   hubLinks,
   onHubLinksChange,
+  groups,
+  frames = true,
   children,
 }: Props) {
   const { theme } = useThemeContext()
   const ariaLabels = useFlowAriaLabels()
   const [hovered, setHovered] = useState<string | undefined>()
   const [highlight] = useState(createHighlighter)
+  const groupDisplay = useGroupDisplay(nodes, hidden, groups, frames)
+  const nodeGroups = groupDisplay.nodeGroups
   const display = useMemo(
-    () => highlight(nodes, edges, { active, hovered, hidden, hiddenHubEdges }),
-    [highlight, nodes, edges, active, hovered, hidden, hiddenHubEdges],
+    () => highlight(nodes, edges, { active, hovered, hidden, hiddenHubEdges, groups: nodeGroups }),
+    [highlight, nodes, edges, active, hovered, hidden, hiddenHubEdges, nodeGroups],
   )
 
   return (
@@ -93,6 +102,7 @@ export function FlowCanvas({
         fitView
       >
         <OverviewZoom />
+        <GroupFrames frames={groupDisplay.frames} proposed={groups?.proposed ?? false} />
         <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
         <MiniMap<TableFlowNode>
           pannable
