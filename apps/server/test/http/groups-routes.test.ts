@@ -210,6 +210,53 @@ describe('table group routes', () => {
     }
   })
 
+  it('refuse a 101st group and a PATCH past 5,000 placements, writing nothing', async () => {
+    const world = buildRealModeApp({
+      userRateLimit: createRateLimiter({ limit: 10_000, windowMs: 60_000 }),
+    })
+    const cookie = await world.signIn()
+    for (let i = 0; i < 100; i++) {
+      await world.app.request(
+        apiPaths.group(shop, source, `g${i}`),
+        jsonRequest('PUT', billingBody, cookie),
+      )
+    }
+    const extra = await world.app.request(
+      apiPaths.group(shop, source, 'extra'),
+      jsonRequest('PUT', billingBody, cookie),
+    )
+    expect(extra.status).toBe(400)
+    expect(await extra.json()).toMatchObject({ error: { details: { reason: 'invalid-groups' } } })
+    expect((await world.tableGroups.get(repoKey, source)).config.groups).toHaveLength(100)
+
+    const place = (assignments: Record<string, string>) =>
+      world.app.request(
+        apiPaths.groupAssignments(shop, source),
+        jsonRequest('PATCH', { assignments }, cookie),
+      )
+    const tables = (from: number, to: number) =>
+      Object.fromEntries(Array.from({ length: to - from }, (_, i) => [`t${from + i}`, 'g0']))
+    expect((await place(tables(0, 5000))).status).toBe(204)
+    const over = await place({ extra: 'g0' })
+    expect(over.status).toBe(400)
+    expect(await over.json()).toMatchObject({ error: { details: { reason: 'invalid-groups' } } })
+    expect(
+      Object.keys((await world.tableGroups.get(repoKey, source)).config.assignments),
+    ).toHaveLength(5000)
+  })
+
+  it('answer invalid-groups-target for a source of 513 characters', async () => {
+    const world = buildRealModeApp()
+    const cookie = await world.signIn()
+    const response = await world.app.request(apiPaths.groups(shop, 's'.repeat(513)), {
+      headers: { cookie },
+    })
+    expect(response.status).toBe(400)
+    expect(await response.json()).toMatchObject({
+      error: { details: { reason: 'invalid-groups-target' } },
+    })
+  })
+
   it('are read-only without push access', async () => {
     const world = buildRealModeApp()
     const cookie = await world.signIn()

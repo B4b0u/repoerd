@@ -1,10 +1,11 @@
-import type {
-  DbSchema,
-  DetectedSource,
-  ManualSource,
-  TableGroup,
-  TableGroupConfig,
-  TablePosition,
+import {
+  type DbSchema,
+  type DetectedSource,
+  type ManualSource,
+  TABLE_GROUP_LIMITS,
+  type TableGroup,
+  type TableGroupConfig,
+  type TablePosition,
 } from '@repoerd/model'
 import type { BlobCache } from '../../src/application/ports/blob-cache.js'
 import {
@@ -101,11 +102,15 @@ export class InMemoryTableGroups implements TableGroupRepository {
     const config = (await this.get(repo, sourceId)).config
     const at = config.groups.findIndex((g) => g.id === group.id)
     if (at >= 0) config.groups[at] = group
+    else if (config.groups.length >= TABLE_GROUP_LIMITS.groups)
+      return { ok: false as const, error: 'too-many-groups' as const }
     else config.groups.push(group)
     this.stored.set(this.key(repo, sourceId), config)
+    return { ok: true as const }
   }
   async deleteGroup(repo: KnownRepo, sourceId: string, groupId: string, _userId: string) {
     const config = (await this.get(repo, sourceId)).config
+    if (!config.groups.some((g) => g.id === groupId)) return
     config.groups = config.groups.filter((g) => g.id !== groupId)
     for (const [table, id] of Object.entries(config.assignments)) {
       if (id === groupId) delete config.assignments[table]
@@ -118,11 +123,15 @@ export class InMemoryTableGroups implements TableGroupRepository {
     assignments: Record<string, string | null>,
     _userId: string,
   ) {
+    if (Object.keys(assignments).length === 0) return { ok: true as const }
     const config = (await this.get(repo, sourceId)).config
     const known = new Set(config.groups.map((g) => g.id))
     if (Object.values(assignments).some((id) => id !== null && !known.has(id))) {
       return { ok: false as const, error: 'unknown-group' as const }
     }
+    const distinct = new Set([...Object.keys(config.assignments), ...Object.keys(assignments)])
+    if (distinct.size > TABLE_GROUP_LIMITS.assignments)
+      return { ok: false as const, error: 'too-many-assignments' as const }
     Object.assign(config.assignments, assignments)
     this.stored.set(this.key(repo, sourceId), config)
     return { ok: true as const }

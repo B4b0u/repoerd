@@ -108,6 +108,39 @@ describe('SqliteTableGroupRepository', () => {
     expect((await groups.get(repo, source)).config.assignments).toEqual({})
   })
 
+  it('refuses a 101st group but still updates an existing one', async () => {
+    for (let i = 0; i < 100; i++) await groups.saveGroup(repo, source, group(`g${i}`), 'alice')
+    expect(await groups.saveGroup(repo, source, group('extra'), 'alice')).toEqual({
+      ok: false,
+      error: 'too-many-groups',
+    })
+    expect(await groups.saveGroup(repo, source, group('g3', { name: 'New' }), 'alice')).toEqual({
+      ok: true,
+    })
+    expect((await groups.get(repo, source)).config.groups).toHaveLength(100)
+  })
+
+  it('refuses placements past 5,000 distinct tables and writes nothing', async () => {
+    await groups.saveGroup(repo, source, group('a'), 'alice')
+    const tables = (from: number, to: number) =>
+      Object.fromEntries(Array.from({ length: to - from }, (_, i) => [`t${from + i}`, 'a']))
+    expect(await groups.place(repo, source, tables(0, 5000), 'alice')).toEqual({ ok: true })
+    // Existing tables do not count twice; one new table crosses the cap.
+    expect(await groups.place(repo, source, tables(0, 10), 'alice')).toEqual({ ok: true })
+    expect(await groups.place(repo, source, { ...tables(0, 2), extra: 'a' }, 'alice')).toEqual({
+      ok: false,
+      error: 'too-many-assignments',
+    })
+    expect(Object.keys((await groups.get(repo, source)).config.assignments)).toHaveLength(5000)
+  })
+
+  it('stays "never configured" when a delete or a placement writes nothing', async () => {
+    await groups.deleteGroup(repo, source, 'ghost', 'alice')
+    expect((await groups.get(repo, source)).configured).toBe(false)
+    expect(await groups.place(repo, source, {}, 'alice')).toEqual({ ok: true })
+    expect((await groups.get(repo, source)).configured).toBe(false)
+  })
+
   it('keeps the sources of a repository, and repositories, independent', async () => {
     await groups.saveGroup(repo, source, group('a'), 'alice')
     await groups.place(repo, source, { users: 'a' }, 'alice')

@@ -16,7 +16,7 @@ import type { LayoutTarget, SaveTablePositions } from '../../application/use-cas
 import type { AccessLevel } from '../../application/use-cases/repo-access.js'
 import type { CompareSide } from '../../domain/branch-compare.js'
 import { isValidBranchName } from '../../domain/branch-name.js'
-import type { LayoutError } from '../../domain/layout.js'
+import { type LayoutError, validateSourceId } from '../../domain/layout.js'
 import type { KnownRepo } from '../../domain/repo.js'
 import { isValidRepoSegment } from '../../domain/repo-segment.js'
 import { isValidGroupId } from '../../domain/table-groups.js'
@@ -292,7 +292,10 @@ export function registerRepoRoutes(app: AppHono, deps: AppDeps) {
   })
 
   /** The group routes' `?source=`: a schema source id, as in the layout routes. */
-  const groupsSource = (c: AppContext): string | null => c.req.query('source') || null
+  const groupsSource = (c: AppContext): string | null => {
+    const sourceId = validateSourceId(c.req.query('source') ?? '')
+    return sourceId.ok ? sourceId.value : null
+  }
 
   const missingGroupsTarget = (c: AppContext) =>
     apiError(c, 400, 'bad_request', MISSING_GROUPS_TARGET, { reason: 'invalid-groups-target' })

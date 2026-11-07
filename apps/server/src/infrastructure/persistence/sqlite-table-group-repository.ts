@@ -1,5 +1,5 @@
-import type { TableGroup, TableGroupConfig } from '@repoerd/model'
-import { and, asc, eq, inArray, sql } from 'drizzle-orm'
+import { TABLE_GROUP_LIMITS, type TableGroup, type TableGroupConfig } from '@repoerd/model'
+import { and, asc, count, eq, inArray, sql } from 'drizzle-orm'
 import type {
   StoredTableGroups,
   TableGroupRepository,
@@ -74,9 +74,26 @@ export class SqliteTableGroupRepository implements TableGroupRepository {
     })
   }
 
-  async saveGroup(repo: KnownRepo, sourceId: string, group: TableGroup, userId: string) {
+  async saveGroup(
+    repo: KnownRepo,
+    sourceId: string,
+    group: TableGroup,
+    userId: string,
+  ): Promise<{ ok: true } | { ok: false; error: 'too-many-groups' }> {
     const key = repoKey(repo)
-    this.db.transaction((tx) => {
+    return this.db.transaction((tx) => {
+      const inSource = and(eq(tableGroups.repo, key), eq(tableGroups.sourceId, sourceId))
+      const exists =
+        tx
+          .select({ id: tableGroups.groupId })
+          .from(tableGroups)
+          .where(and(inSource, eq(tableGroups.groupId, group.id)))
+          .get() !== undefined
+      if (!exists) {
+        const total = tx.select({ n: count() }).from(tableGroups).where(inSource).get()?.n ?? 0
+        if (total >= TABLE_GROUP_LIMITS.groups)
+          return { ok: false, error: 'too-many-groups' } as const
+      }
       const last = tx
         .select({ max: sql<number | null>`max(${tableGroups.position})` })
         .from(tableGroups)
@@ -104,13 +121,15 @@ export class SqliteTableGroupRepository implements TableGroupRepository {
         })
         .run()
       this.markConfigured(tx, key, sourceId, userId)
+      return { ok: true } as const
     })
   }
 
   async deleteGroup(repo: KnownRepo, sourceId: string, groupId: string, userId: string) {
     const key = repoKey(repo)
     this.db.transaction((tx) => {
-      tx.delete(tableGroups)
+      const deleted = tx
+        .delete(tableGroups)
         .where(
           and(
             eq(tableGroups.repo, key),
@@ -119,6 +138,7 @@ export class SqliteTableGroupRepository implements TableGroupRepository {
           ),
         )
         .run()
+      if (deleted.changes === 0) return
       tx.delete(tableGroupAssignments)
         .where(
           and(
@@ -137,7 +157,8 @@ export class SqliteTableGroupRepository implements TableGroupRepository {
     sourceId: string,
     assignments: Record<string, string | null>,
     userId: string,
-  ): Promise<{ ok: true } | { ok: false; error: 'unknown-group' }> {
+  ): Promise<{ ok: true } | { ok: false; error: 'unknown-group' | 'too-many-assignments' }> {
+    if (Object.keys(assignments).length === 0) return { ok: true }
     const key = repoKey(repo)
     const wanted = [...new Set(Object.values(assignments).filter((id) => id !== null))]
     return this.db.transaction((tx) => {
@@ -157,6 +178,23 @@ export class SqliteTableGroupRepository implements TableGroupRepository {
         for (const row of rows) known.add(row.id)
       }
       if (wanted.some((id) => !known.has(id))) return { ok: false, error: 'unknown-group' } as const
+      const inSource = and(
+        eq(tableGroupAssignments.repo, key),
+        eq(tableGroupAssignments.sourceId, sourceId),
+      )
+      const stored =
+        tx.select({ n: count() }).from(tableGroupAssignments).where(inSource).get()?.n ?? 0
+      let alreadyPlaced = 0
+      for (const names of chunk(Object.keys(assignments))) {
+        alreadyPlaced +=
+          tx
+            .select({ n: count() })
+            .from(tableGroupAssignments)
+            .where(and(inSource, inArray(tableGroupAssignments.tableName, names)))
+            .get()?.n ?? 0
+      }
+      if (stored + Object.keys(assignments).length - alreadyPlaced > TABLE_GROUP_LIMITS.assignments)
+        return { ok: false, error: 'too-many-assignments' } as const
       const rows = Object.entries(assignments).map(([tableName, groupId]) => ({
         repo: key,
         sourceId,

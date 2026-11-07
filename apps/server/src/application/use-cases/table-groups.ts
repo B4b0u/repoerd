@@ -1,4 +1,4 @@
-import type { TableGroup, TableGroupConfig } from '@repoerd/model'
+import { TABLE_GROUP_LIMITS, type TableGroup, type TableGroupConfig } from '@repoerd/model'
 import type { KnownRepo } from '../../domain/repo.js'
 import { err, ok, type Result } from '../../domain/result.js'
 import {
@@ -34,8 +34,13 @@ export function makeTableGroups(deps: { groups: TableGroupRepository }) {
     ): Promise<Result<void, TableGroupsError>> {
       const valid = validateTableGroup(input)
       if (!valid.ok) return valid
-      await deps.groups.saveGroup(repo, sourceId, valid.value, userId)
-      return ok(undefined)
+      const saved = await deps.groups.saveGroup(repo, sourceId, valid.value, userId)
+      return saved.ok
+        ? ok(undefined)
+        : err({
+            kind: 'invalid-groups',
+            message: `At most ${TABLE_GROUP_LIMITS.groups} groups per source`,
+          })
     },
 
     deleteGroup: (repo: KnownRepo, sourceId: string, groupId: string, userId: string) =>
@@ -52,7 +57,13 @@ export function makeTableGroups(deps: { groups: TableGroupRepository }) {
       const placed = await deps.groups.place(repo, sourceId, valid.value, userId)
       return placed.ok
         ? ok(undefined)
-        : err({ kind: 'invalid-groups', message: 'Placement to an unknown group' })
+        : err({
+            kind: 'invalid-groups',
+            message:
+              placed.error === 'unknown-group'
+                ? 'Placement to an unknown group'
+                : `At most ${TABLE_GROUP_LIMITS.assignments} placements per source`,
+          })
     },
   }
 }
