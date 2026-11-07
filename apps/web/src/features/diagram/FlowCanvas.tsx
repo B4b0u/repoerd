@@ -12,7 +12,7 @@ import {
   useStoreApi,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useThemeContext } from '../../shared/theme/theme-context'
 import { CanvasToolbar } from './CanvasToolbar'
 import { useFlowAriaLabels } from './flow-aria'
@@ -85,16 +85,27 @@ export function FlowCanvas({
   )
 
   const selection = useSelection(nodes, hidden, selectable, onNodesChange)
+  const canvas = useRef<HTMLDivElement>(null)
+  // The bar goes with the placed selection, and the focus it held with it: to the canvas instead,
+  // unless the focus has moved elsewhere meanwhile.
+  const onPlaced = (tables: string[]) => {
+    const focused = document.activeElement
+    if (!focused || focused === document.body || canvas.current?.contains(focused)) {
+      canvas.current?.focus()
+    }
+    selection.unselect(tables)
+  }
 
   return (
-    <div className="diagram-canvas">
+    // Focusable from code only (tabIndex -1): no tab stop of its own.
+    <div ref={canvas} tabIndex={-1} className="diagram-canvas outline-none">
       <EdgeMarkerDefs />
       {children}
       {selectable && <SelectionStatus count={selection.tables.length} />}
       {selection.tables.length > 0 && (
         <PlaceSelectionBar
           tables={selection.tables}
-          onPlaced={selection.unselect}
+          onPlaced={onPlaced}
           onClear={selection.clear}
         />
       )}
@@ -208,6 +219,10 @@ const isTextField = (target: EventTarget | null) =>
   (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
 
 /**
+ * Relies on internals of React Flow's store (nodesSelectionActive, userSelectionRect,
+ * multiSelectionActive, userSelectionActive), not part of its documented API: check this guard
+ * again on every upgrade of @xyflow/react (written against 12.12).
+ *
  * Keeps React Flow's selection state to what this canvas uses, from inside <ReactFlow>: reports
  * whether a selection box is being drawn. Its store is corrected as soon as it changes, before any
  * render: no overlay over the selected cards once a box is drawn (it would catch their clicks and

@@ -193,6 +193,22 @@ describe('placing selected tables into a group', () => {
     expect([...undo.clear].sort()).toEqual(['invoices', 'users'])
   })
 
+  it('gives the focus to the canvas once the selection is placed (the bar is gone)', async () => {
+    renderWorkspace()
+    await groupsLoaded()
+    const user = userEvent.setup()
+    await shiftClick('users', 'invoices')
+    const bar = await screen.findByRole('toolbar', { name: 'Selected tables' })
+    await user.click(within(bar).getByRole('button', { name: 'Accounts' }))
+    await waitFor(() =>
+      expect(screen.queryByRole('toolbar', { name: 'Selected tables' })).toBeNull(),
+    )
+    const canvas = document.querySelector('.diagram-canvas') as HTMLElement
+    expect(document.activeElement).toBe(canvas)
+    // Focusable from code only: no tab stop is added.
+    expect(canvas.tabIndex).toBe(-1)
+  })
+
   it('places the selection once on a double click', async () => {
     const { server } = renderWorkspace()
     await groupsLoaded()
