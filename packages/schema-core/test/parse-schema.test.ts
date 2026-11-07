@@ -201,6 +201,36 @@ export const timestamps = { createdAt: timestamp('created_at'), updatedAt: times
     ])
   })
 
+  it('resolves a customType declared in another file of the source', async () => {
+    const result = await parseSchema(
+      [
+        {
+          path: 'src/db/schema.ts',
+          content: `import { pgTable } from 'drizzle-orm/pg-core'
+import { citext } from './types'
+
+export const users = pgTable('users', { email: citext('email').notNull() })
+`,
+        },
+        {
+          path: 'src/db/types.ts',
+          content: `import { customType } from 'drizzle-orm/pg-core'
+
+export const citext = customType<{ data: string }>({ dataType() { return 'citext' } })
+`,
+        },
+      ],
+      'drizzle',
+    )
+
+    if (!result.ok) throw new Error(`expected success, got ${JSON.stringify(result.failure)}`)
+    expect(result.schema.tables.users?.columns.find((c) => c.name === 'email')).toMatchObject({
+      name: 'email',
+      type: 'citext',
+      notNull: true,
+    })
+  })
+
   it('returns a parse error without ANSI colour codes when Prisma is invalid', async () => {
     const result = await parseSchema([{ path: 'schema.prisma', content: 'model {' }], 'prisma')
 

@@ -5,5 +5,6 @@
  * 2: plan 6c (patched Liam, `schema.table` names, casing, views, new problems).
  * 3: plan 6e (a one-to-many Prisma self-relation is no longer read as a many-to-many table).
  * 4: Drizzle spread columns returned by a top-level function without parameters (`...f()`).
+ * 5: Drizzle `customType` columns use the `dataType` literal when it is a string.
  */
-export const CACHE_VERSION = 4
+export const CACHE_VERSION = 5
