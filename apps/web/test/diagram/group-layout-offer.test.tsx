@@ -3,8 +3,10 @@ import type { TableGroupsResponse } from '@repoerd/contracts'
 import { type DbSchema, GROUP_PALETTE, type Table } from '@repoerd/model'
 import { act, cleanup, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DiagramWorkspace } from '../../src/features/diagram/DiagramWorkspace'
+import type { ViewState } from '../../src/features/diagram/view-state'
 import { fakeGroupsServer } from '../groups-server'
 import { renderWithApp } from '../render'
 
@@ -81,18 +83,22 @@ function renderWorkspace(
   { groups = configured, positions = SAVED, canEdit = true, strict = false } = {},
 ) {
   const server = fakeGroupsServer(groups, { positions, canEdit })
-  renderWithApp(
-    <DiagramWorkspace
-      repo={repo}
-      schema={schema}
-      sourceId="db"
-      viewState={{ hidden: [], mode: 'ALL_FIELDS' }}
-      updateView={vi.fn()}
-    />,
-    server.client,
-    { reactStrictMode: strict },
-  )
-  return server
+  let setViewState: (next: ViewState) => void = () => {}
+  function Workspace() {
+    const [viewState, setCurrent] = useState<ViewState>({ hidden: [], mode: 'ALL_FIELDS' })
+    setViewState = setCurrent
+    return (
+      <DiagramWorkspace
+        repo={repo}
+        schema={schema}
+        sourceId="db"
+        viewState={viewState}
+        updateView={vi.fn()}
+      />
+    )
+  }
+  renderWithApp(<Workspace />, server.client, { reactStrictMode: strict })
+  return { server, view: (next: ViewState) => act(() => setViewState(next)) }
 }
 
 /** The canvas is placed and the groups are loaded (their frames are labelled). */
@@ -194,16 +200,42 @@ describe('the offer to lay out the diagram by group', () => {
   })
 
   it('is not made on a first visit, nor once that visit has placed the tables', async () => {
+    const positions: typeof SAVED = []
+    const { view } = renderWorkspace(nextRepo(), { positions })
+    await settled()
+    expect(screen.queryByRole('button', { name: OFFER })).toBeNull()
+
+    // The canvas mounts again in the same visit (back from the related tables), now reading the
+    // positions it saved.
+    positions.push(...SAVED)
+    await view({ hidden: [], mode: 'ALL_FIELDS', focus: 'invoices' })
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /Back to full schema/ })).toBeTruthy(),
+    )
+    await view({ hidden: [], mode: 'ALL_FIELDS' })
+    await waitFor(() => expect(vi.mocked(layout.placeTables)).toHaveBeenCalledTimes(2))
+    await settled()
+    expect(screen.queryByRole('button', { name: OFFER })).toBeNull()
+  })
+
+  it('reads the saved layout afresh once the diagram was left and opened again', async () => {
     const repo = nextRepo()
     renderWorkspace(repo, { positions: [] })
     await settled()
     expect(screen.queryByRole('button', { name: OFFER })).toBeNull()
 
-    // The canvas mounts again in the same visit, now with the positions it saved.
+    // Another page, then back: the positions saved by the first visit are a layout of the user's.
     cleanup()
     renderWorkspace(repo)
-    await settled()
-    expect(screen.queryByRole('button', { name: OFFER })).toBeNull()
+    expect(await screen.findByRole('button', { name: OFFER })).toBeTruthy()
+  })
+
+  it('is shown on the canvas side, away from the detail panel', async () => {
+    renderWorkspace(nextRepo())
+    const offer = await screen.findByRole('button', { name: OFFER })
+    const toaster = offer.closest('[data-sonner-toaster]')
+    expect(toaster?.getAttribute('data-y-position')).toBe('bottom')
+    expect(toaster?.getAttribute('data-x-position')).toBe('left')
   })
 
   it('is not made for groups that are only proposed', async () => {

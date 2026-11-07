@@ -33,13 +33,3 @@ export function mainCanvas(page: Page): Locator {
     .locator('.react-flow')
     .filter({ has: page.getByRole('combobox', { name: 'Display mode' }) })
 }
-
-/**
- * Marks the offer to lay out a diagram by group as already shown, in this page's browser: the
- * notice stays until it is used or dismissed, over the top of the detail panel.
- */
-export async function skipGroupLayoutOffer(page: Page, repo: string, source: string) {
-  await page.addInitScript((key) => {
-    window.localStorage.setItem(key, 'shown')
-  }, `repoerd:group-layout-offer:${repo}:${source}`)
-}

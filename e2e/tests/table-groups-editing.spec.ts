@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test'
-import { expect, mainCanvas, skipGroupLayoutOffer, test } from './fixtures'
+import { expect, mainCanvas, test } from './fixtures'
 
 // acme/storefront, whose groups table-groups-selection.spec.ts writes too (the tests share one
 // database, in either order): these tests only touch the marketing and catalog groups, and save
@@ -48,8 +48,6 @@ const groupWrites = (page: Page) => {
 test('renames a group, places a table in it from its details and undoes it, for good', async ({
   page,
 }) => {
-  // Shown on a later visit, the offer would cover the detail panel: the next test is about it.
-  await skipGroupLayoutOffer(page, 'acme/storefront', 'prisma/schema.prisma')
   const { canvas } = await openWithSavedGroups(page)
 
   // Rename from the frame label.

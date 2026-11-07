@@ -4,11 +4,14 @@ import { toast } from 'sonner'
 import { useGroupsTranslation } from './groups-i18n'
 
 /**
- * Per repository, source and display mode: whether a layout was saved when this page first placed
- * its tables. A canvas mounted again later in the visit (another mode, the related view) finds
- * the positions it saved itself: they must not count as a layout the user already had.
+ * Per repository, source and display mode: whether a layout was saved when the diagram of this
+ * source first placed its tables. A canvas mounted again while the diagram stays open (another
+ * mode, back from the related view) finds the positions it saved itself: they must not count as
+ * a layout the user already had. Forgotten when the diagram is left (`forgetVisit`).
  */
 const layoutAtFirstPlacement = new Map<string, boolean>()
+
+const visitKey = (repo: RepoRef, sourceId: string) => `${repo.owner}/${repo.name}:${sourceId}:`
 
 /** Whether the user had a saved layout before this visit placed any table of it. */
 export function hadLayoutBeforeVisit(
@@ -17,11 +20,19 @@ export function hadLayoutBeforeVisit(
   mode: DisplayMode,
   hasSavedPositions: boolean,
 ): boolean {
-  const key = `${repo.owner}/${repo.name}:${sourceId}:${mode}`
+  const key = visitKey(repo, sourceId) + mode
   const known = layoutAtFirstPlacement.get(key)
   if (known !== undefined) return known
   layoutAtFirstPlacement.set(key, hasSavedPositions)
   return hasSavedPositions
+}
+
+/** The diagram of this source is left: a later visit reads its saved layouts afresh. */
+export function forgetVisit(repo: RepoRef, sourceId: string) {
+  const prefix = visitKey(repo, sourceId)
+  for (const key of [...layoutAtFirstPlacement.keys()]) {
+    if (key.startsWith(prefix)) layoutAtFirstPlacement.delete(key)
+  }
 }
 
 const storageKey = (repo: RepoRef, sourceId: string) =>
@@ -78,6 +89,9 @@ export function GroupLayoutOffer({ repo, sourceId, eligible, onLayOut }: Props) 
     toast(t('layoutOffer.message'), {
       id,
       duration: Number.POSITIVE_INFINITY,
+      // On the canvas side: the other notices' corner (top right) is over the detail panel, whose
+      // controls this one would hide until used or dismissed.
+      position: 'bottom-left',
       // The text on its own line, the two buttons under it: the action's label is long.
       classNames: { toast: 'flex-wrap', content: 'basis-full!' },
       action: {
