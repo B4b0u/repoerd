@@ -1,4 +1,11 @@
-import type { DbSchema, DetectedSource, ManualSource, TablePosition } from '@repoerd/model'
+import type {
+  DbSchema,
+  DetectedSource,
+  ManualSource,
+  TableGroup,
+  TableGroupConfig,
+  TablePosition,
+} from '@repoerd/model'
 import type { BlobCache } from '../../src/application/ports/blob-cache.js'
 import {
   EMPTY_INSTANCE_CONFIG,
@@ -15,6 +22,10 @@ import type {
   SessionRepository,
   StoredSession,
 } from '../../src/application/ports/session-repository.js'
+import type {
+  StoredTableGroups,
+  TableGroupRepository,
+} from '../../src/application/ports/table-groups.js'
 import type {
   AppUser,
   UserProfile,
@@ -70,6 +81,51 @@ export class InMemoryRepoSettings implements RepoSettingsRepository {
   async save(repo: KnownRepo, sources: ManualSource[], _updatedBy: string) {
     if (sources.length === 0) this.settings.delete(repoKey(repo))
     else this.settings.set(repoKey(repo), sources)
+  }
+}
+
+export class InMemoryTableGroups implements TableGroupRepository {
+  readonly stored = new Map<string, TableGroupConfig>()
+  private key = (repo: KnownRepo, sourceId: string) => `${repoKey(repo)}|${sourceId}`
+
+  async get(repo: KnownRepo, sourceId: string): Promise<StoredTableGroups> {
+    const config = this.stored.get(this.key(repo, sourceId))
+    return config
+      ? { configured: true, config: structuredClone(config) }
+      : { configured: false, config: { groups: [], assignments: {} } }
+  }
+  async replace(repo: KnownRepo, sourceId: string, config: TableGroupConfig, _userId: string) {
+    this.stored.set(this.key(repo, sourceId), structuredClone(config))
+  }
+  async saveGroup(repo: KnownRepo, sourceId: string, group: TableGroup, _userId: string) {
+    const config = (await this.get(repo, sourceId)).config
+    const at = config.groups.findIndex((g) => g.id === group.id)
+    if (at >= 0) config.groups[at] = group
+    else config.groups.push(group)
+    this.stored.set(this.key(repo, sourceId), config)
+  }
+  async deleteGroup(repo: KnownRepo, sourceId: string, groupId: string, _userId: string) {
+    const config = (await this.get(repo, sourceId)).config
+    config.groups = config.groups.filter((g) => g.id !== groupId)
+    for (const [table, id] of Object.entries(config.assignments)) {
+      if (id === groupId) delete config.assignments[table]
+    }
+    this.stored.set(this.key(repo, sourceId), config)
+  }
+  async place(
+    repo: KnownRepo,
+    sourceId: string,
+    assignments: Record<string, string | null>,
+    _userId: string,
+  ) {
+    const config = (await this.get(repo, sourceId)).config
+    const known = new Set(config.groups.map((g) => g.id))
+    if (Object.values(assignments).some((id) => id !== null && !known.has(id))) {
+      return { ok: false as const, error: 'unknown-group' as const }
+    }
+    Object.assign(config.assignments, assignments)
+    this.stored.set(this.key(repo, sourceId), config)
+    return { ok: true as const }
   }
 }
 

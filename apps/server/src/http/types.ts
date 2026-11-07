@@ -9,6 +9,7 @@ import type { ReplaceApp } from '../application/use-cases/replace-app.js'
 import type { RepoAccess } from '../application/use-cases/repo-access.js'
 import type { RepoSettings } from '../application/use-cases/repo-settings.js'
 import type { Setup } from '../application/use-cases/setup.js'
+import type { TableGroups } from '../application/use-cases/table-groups.js'
 import type { RateLimiter } from '../domain/rate-limit.js'
 import type { CurrentUser } from './current-user.js'
 
@@ -26,6 +27,7 @@ export interface CommonDeps {
   getLayout: GetLayout
   saveTablePositions: SaveTablePositions
   repoSettings: RepoSettings
+  tableGroups: TableGroups
   admin: Admin
   logger: AppLogger
   /** Reported by /healthz. */

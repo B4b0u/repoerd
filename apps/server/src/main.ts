@@ -16,6 +16,7 @@ import { makeReplaceApp } from './application/use-cases/replace-app.js'
 import { makeRepoAccess } from './application/use-cases/repo-access.js'
 import { makeRepoSettings } from './application/use-cases/repo-settings.js'
 import { makeSetup } from './application/use-cases/setup.js'
+import { makeTableGroups } from './application/use-cases/table-groups.js'
 import { loadConfig } from './config.js'
 import { createRateLimiter, USER_REQUESTS_PER_MINUTE } from './domain/rate-limit.js'
 import { createApp } from './http/app.js'
@@ -40,6 +41,7 @@ import { SqliteLegacyRepoKeys } from './infrastructure/persistence/sqlite-legacy
 import { SqliteRepoSettingsRepository } from './infrastructure/persistence/sqlite-repo-settings-repository.js'
 import { SqliteSchemaCache } from './infrastructure/persistence/sqlite-schema-cache.js'
 import { SqliteSessionRepository } from './infrastructure/persistence/sqlite-session-repository.js'
+import { SqliteTableGroupRepository } from './infrastructure/persistence/sqlite-table-group-repository.js'
 import { SqliteUserRepository } from './infrastructure/persistence/sqlite-user-repository.js'
 import { schemaCoreToolkit } from './infrastructure/schema/schema-core-toolkit.js'
 import { makeShutdown } from './shutdown.js'
@@ -78,6 +80,7 @@ async function main() {
   const sessions = new SqliteSessionRepository(db)
   const layouts = new SqliteLayoutRepository(db)
   const repoSettings = new SqliteRepoSettingsRepository(db)
+  const tableGroups = new SqliteTableGroupRepository(db)
   // Rows saved by repository name before plan 6d move to the repository's id on access.
   const legacyKeys = new SqliteLegacyRepoKeys(db)
   const schemaCache = new SqliteSchemaCache(db)
@@ -123,6 +126,7 @@ async function main() {
       getLayout: makeGetLayout({ layouts }),
       saveTablePositions: makeSaveTablePositions({ layouts }),
       repoSettings: makeRepoSettings({ settings: repoSettings }),
+      tableGroups: makeTableGroups({ groups: tableGroups }),
       admin: makeAdmin({ config: instanceConfig, users, directory, sessions, now }),
       logger,
       version: config.version,

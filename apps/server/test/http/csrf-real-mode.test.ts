@@ -5,6 +5,10 @@ import { buildRealModeApp } from './build-app.js'
 const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
 const LAYOUT = '/api/repos/acme/shop/layout?source=prisma%2Fschema.prisma&mode=ALL_FIELDS'
 
+const GROUPS = '/api/repos/acme/shop/groups?source=prisma%2Fschema.prisma'
+const GROUP = '/api/repos/acme/shop/groups/billing?source=prisma%2Fschema.prisma'
+const ASSIGNMENTS = '/api/repos/acme/shop/groups-assignments?source=prisma%2Fschema.prisma'
+
 /** Every mutating /api route of the real mode: its registered pattern and a path it answers. */
 const ROUTES = [
   { method: 'POST', pattern: '/api/setup/unlock', path: '/api/setup/unlock' },
@@ -28,6 +32,10 @@ const ROUTES = [
     pattern: '/api/repos/:owner/:repo/settings',
     path: '/api/repos/acme/shop/settings',
   },
+  { method: 'PUT', pattern: '/api/repos/:owner/:repo/groups', path: GROUPS },
+  { method: 'PUT', pattern: '/api/repos/:owner/:repo/groups/:groupId', path: GROUP },
+  { method: 'DELETE', pattern: '/api/repos/:owner/:repo/groups/:groupId', path: GROUP },
+  { method: 'PATCH', pattern: '/api/repos/:owner/:repo/groups-assignments', path: ASSIGNMENTS },
 ]
 
 /** A configured instance and the cookie of a signed-in administrator. */

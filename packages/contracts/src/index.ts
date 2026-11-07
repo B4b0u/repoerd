@@ -7,6 +7,7 @@ import type {
   SchemaFailure,
   SchemaFormat,
   SourceProblem,
+  TableGroup,
   TablePosition,
 } from '@repoerd/model'
 import { z } from 'zod'
@@ -190,6 +191,16 @@ export const manualSourceSchema = z.object({
 
 export const repoSettingsBodySchema = z.object({ sources: z.array(manualSourceSchema).max(50) })
 
+export interface TableGroupsResponse {
+  /** false until a first write: "never configured" differs from "configured, empty". */
+  configured: boolean
+  groups: TableGroup[]
+  /** Manual placements: table name → group id, or null for "explicitly ungrouped". */
+  assignments: Record<string, string | null>
+  /** The user has push access to the repository. */
+  canEdit: boolean
+}
+
 export interface RepoSettingsResponse {
   /** [] = automatic detection. */
   sources: ManualSource[]
@@ -300,6 +311,8 @@ export type ApiErrorReason =
   | 'invalid-repository-name'
   | 'invalid-layout-target'
   | 'invalid-layout'
+  | 'invalid-groups-target'
+  | 'invalid-groups'
   | 'invalid-compare'
   | 'invalid-branch-name'
 
@@ -353,6 +366,11 @@ export const apiPaths = {
       inherit: options?.inherit ? '1' : undefined,
     }),
   repoSettings: (repo: RepoRef) => `${repoPath(repo)}/settings`,
+  groups: (repo: RepoRef, source: string) => withQuery(`${repoPath(repo)}/groups`, { source }),
+  group: (repo: RepoRef, source: string, groupId: string) =>
+    withQuery(`${repoPath(repo)}/groups/${encodeURIComponent(groupId)}`, { source }),
+  groupAssignments: (repo: RepoRef, source: string) =>
+    withQuery(`${repoPath(repo)}/groups-assignments`, { source }),
   adminConfig: '/api/admin/config',
   adminAdmins: '/api/admin/admins',
   adminAdmin: (id: string) => `/api/admin/admins/${encodeURIComponent(id)}`,
