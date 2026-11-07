@@ -74,7 +74,7 @@ export function preparePrismaSchema(input: string): PreparedPrisma {
   const output = [...lines]
   const inserted = new Map<number, string>()
   const viewTables: string[] = []
-  const tableLines: Record<string, number> = {}
+  const tableLineEntries: [string, number][] = []
   const { blocks, unclosed } = blocksOf(lines)
   // A block left open: Prisma must report that real error, not one about our additions.
   if (unclosed) return { text: input, viewTables: [], tableLines: {}, injectedLines: [] }
@@ -87,7 +87,7 @@ export function preparePrismaSchema(input: string): PreparedPrisma {
     } else if (block.keyword === 'view') {
       viewTables.push(tableKeyOf(block, body))
     } else if (block.keyword === 'model') {
-      tableLines[tableKeyOf(block, body)] = block.start
+      tableLineEntries.push([tableKeyOf(block, body), block.start])
     }
   }
   const injectedLines: number[] = []
@@ -103,7 +103,8 @@ export function preparePrismaSchema(input: string): PreparedPrisma {
   return {
     text: `${text}\n\ngenerator repoerd {\n  provider        = "prisma-client-js"\n  previewFeatures = [${features}]\n}\n`,
     viewTables,
-    tableLines,
+    // Own keys: a table named `__proto__` must stay a key.
+    tableLines: Object.fromEntries(tableLineEntries),
     injectedLines,
   }
 }

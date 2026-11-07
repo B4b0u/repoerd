@@ -33,13 +33,35 @@ export interface ParseOptions {
  * that order) with '\n'. Each file occupies as many lines as it has when split on line breaks.
  */
 export function fileAtLine(files: readonly SchemaFile[], line: number): string | undefined {
-  let start = 0
+  return fileAtLineIn(files, lineEnds(files), line)
+}
+
+/** Exclusive end line of each file in the joined text (one split per file). */
+function lineEnds(files: readonly SchemaFile[]): number[] {
+  const ends: number[] = []
+  let end = 0
   for (const file of files) {
-    const end = start + file.content.split(/\r?\n/).length
-    if (line >= start && line < end) return file.path
-    start = end
+    end += file.content.split(/\r?\n/).length
+    ends.push(end)
   }
-  return undefined
+  return ends
+}
+
+/** Binary search of the first file whose end is past `line`. */
+function fileAtLineIn(
+  files: readonly SchemaFile[],
+  ends: readonly number[],
+  line: number,
+): string | undefined {
+  if (line < 0) return undefined
+  let low = 0
+  let high = ends.length
+  while (low < high) {
+    const middle = (low + high) >>> 1
+    if ((ends[middle] as number) <= line) low = middle + 1
+    else high = middle
+  }
+  return files[low]?.path
 }
 
 export async function parseSchema(
@@ -67,8 +89,9 @@ export async function parseSchema(
         return { ok: false, failure: parseError(format, clean(outcome.errors.join('\n'))) }
       }
       const declarationFiles = new Map<string, string>()
+      const ends = lineEnds(ordered)
       for (const [key, line] of Object.entries(outcome.declarationLines)) {
-        const file = fileAtLine(ordered, line)
+        const file = fileAtLineIn(ordered, ends, line)
         if (file !== undefined) declarationFiles.set(key, file)
       }
       const schema = toDbSchema(outcome.schema, { casing: options.casing, declarationFiles })

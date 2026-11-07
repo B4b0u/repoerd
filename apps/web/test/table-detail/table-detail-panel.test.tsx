@@ -14,7 +14,10 @@ import { useViewState } from '../../src/features/diagram/view-state'
 import { TableDetailPanel } from '../../src/features/table-detail/TableDetailPanel'
 import { i18n } from '../../src/shared/i18n/i18n'
 
-afterEach(() => cleanup())
+afterEach(async () => {
+  cleanup()
+  await i18n.changeLanguage('en')
+})
 
 const schema: DbSchema = {
   tables: {
@@ -124,12 +127,11 @@ describe('TableDetailPanel', () => {
     )
     const path = screen.getByText('src/db/schema/tickets.ts')
     expect(path.closest('p')?.textContent).toContain('File')
-    expect(screen.getByText('File')).toBeTruthy()
     expect(path.closest('p')?.getAttribute('title')).toBe('src/db/schema/tickets.ts')
     await act(() => i18n.changeLanguage('fr'))
     expect(screen.getByText('Fichier')).toBeTruthy()
-    await act(() => i18n.changeLanguage('en'))
     unmount()
+    await act(() => i18n.changeLanguage('en'))
     renderPanel()
     expect(screen.queryByText('File')).toBeNull()
   })

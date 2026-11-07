@@ -197,6 +197,29 @@ describe('parseSchema', () => {
     expect(fileAtLine(files, 4)).toBeUndefined()
   })
 
+  it('maps lines to files on many large files without rescanning them per table', async () => {
+    const files = Array.from({ length: 1000 }, (_, i) => ({
+      path: `models/m${String(i).padStart(4, '0')}.prisma`,
+      content: `model T${i} {\n  id Int @id\n}\n${'// filler\n'.repeat(1000)}`,
+    }))
+    files[0] = {
+      path: files[0]?.path as string,
+      content: `datasource db {\n  provider = "postgresql"\n  url      = env("DATABASE_URL")\n}\n\n${files[0]?.content}`,
+    }
+    const started = performance.now()
+    expect(fileAtLine(files, 0)).toBe(files[0]?.path)
+    const lastStart = files.slice(0, 999).reduce((n, f) => n + f.content.split('\n').length, 0)
+    expect(fileAtLine(files, lastStart)).toBe(files[999]?.path)
+    expect(fileAtLine(files, lastStart - 1)).toBe(files[998]?.path)
+    const result = await parseSchema(files, 'prisma')
+    if (!result.ok) throw new Error(JSON.stringify(result.failure))
+    for (const i of [0, 1, 500, 998, 999]) {
+      expect(result.schema.tables[`T${i}`]?.file).toBe(files[i]?.path)
+    }
+    // Generous: the quadratic mapping alone took seconds on this input.
+    expect(performance.now() - started).toBeLessThan(20_000)
+  }, 60_000)
+
   it('parses Drizzle schemas split across files, using database column names', async () => {
     const result = await parseSchema(
       [

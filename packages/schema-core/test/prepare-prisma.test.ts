@@ -116,3 +116,10 @@ describe('preparePrismaSchema tableLines', () => {
     expect(preparePrismaSchema(input).tableLines).toEqual({ users: 0, 'billing.Invoice': 5 })
   })
 })
+
+describe('prepare-prisma table lines', () => {
+  it('keeps a model mapped to __proto__ as an own key', () => {
+    const prepared = preparePrismaSchema('model W {\n  id Int @id\n  @@map("__proto__")\n}\n')
+    expect(Object.getOwnPropertyDescriptor(prepared.tableLines, '__proto__')?.value).toBe(0)
+  })
+})
