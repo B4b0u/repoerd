@@ -17,13 +17,14 @@ import { useThemeContext } from '../../shared/theme/theme-context'
 import { CanvasToolbar, type GroupToolbarActions } from './CanvasToolbar'
 import { useFlowAriaLabels } from './flow-aria'
 import { edgeTypes, nodeTypes } from './flow-types'
-import { GroupFrames, useGroupDisplay } from './groups/GroupFrames'
+import { useGroupDisplay } from './groups/GroupFrames'
 import type { GroupView } from './groups/group-view'
 import { PlaceSelectionBar, SelectionStatus } from './groups/PlaceSelectionBar'
 import type { HubLinksMode } from './hubs'
 import { minimapColor } from './model/diff-view'
 import { createHighlighter } from './model/highlight'
 import type { RelationshipFlowEdge, TableFlowNode } from './model/to-flow'
+import { FramesAndOverviewLabels } from './OverviewLabels'
 import { OverviewZoom } from './OverviewZoom'
 import { EdgeMarkerDefs } from './RelationshipEdge'
 
@@ -144,7 +145,13 @@ export function FlowCanvas({
       >
         <OverviewZoom />
         <SelectionGuard onBoxingChange={selection.setBoxing} />
-        <GroupFrames frames={groupDisplay.frames} proposed={groups?.proposed ?? false} />
+        <FramesAndOverviewLabels
+          nodes={nodes}
+          edges={edges}
+          hidden={hidden}
+          frames={groupDisplay.frames}
+          proposed={groups?.proposed ?? false}
+        />
         <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
         <MiniMap<TableFlowNode>
           pannable

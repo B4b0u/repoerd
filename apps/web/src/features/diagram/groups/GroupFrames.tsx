@@ -108,7 +108,16 @@ export function useGroupDisplay(
  * (see diagram.css), which a frame's own stacking context would prevent. With the editing
  * commands, a label is a button that opens the group's editor; otherwise it is inert text.
  */
-export function GroupFrames({ frames, proposed }: { frames: DrawnFrame[]; proposed: boolean }) {
+export function GroupFrames({
+  frames,
+  proposed,
+  crowded,
+}: {
+  frames: DrawnFrame[]
+  proposed: boolean
+  /** Names left out of the overview at this zoom: they would overlap a larger group's. */
+  crowded?: ReadonlySet<string>
+}) {
   const { theme } = useThemeContext()
   const editing = useGroupEditing()
   const flow = useReactFlow()
@@ -160,7 +169,9 @@ export function GroupFrames({ frames, proposed }: { frames: DrawnFrame[]; propos
       {frames.map((frame) => {
         const colors: GroupColors = frame.colors[theme]
         const label = {
-          className: 'group-frame__label',
+          className: crowded?.has(frame.groupId)
+            ? 'group-frame__label group-frame__label--crowded'
+            : 'group-frame__label',
           'data-label-of': frame.groupId,
           title: frame.name,
           style: {

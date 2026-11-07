@@ -284,6 +284,48 @@ button.group-frame__label:focus-visible {
     translateY(-100%);
 }
 
+/* A name that would overlap a larger group's at this zoom is left out, like on a map: it comes
+   back as the user zooms in. Still reachable with Tab (it shows while focused). */
+.react-flow[data-overview] .group-frame__label--crowded:not(:focus-visible) {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* A table name too small to read on its card, floating over it at a readable size (placed by
+   overview-labels.ts, which leaves out the names that would overlap). Under the group names. */
+.overview-label {
+  box-sizing: border-box;
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1500;
+  padding: calc(2px / var(--canvas-zoom, 1)) calc(6px / var(--canvas-zoom, 1));
+  overflow: hidden;
+  border: calc(1px / var(--canvas-zoom, 1)) solid var(--border);
+  border-radius: calc(4px / var(--canvas-zoom, 1));
+  background: var(--surface);
+  color: var(--text);
+  font-size: calc(12px / var(--canvas-zoom, 1));
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.overview-label--diff-added {
+  border-color: var(--diff-added);
+}
+
+.overview-label--diff-removed {
+  border-color: var(--diff-removed);
+}
+
+.overview-label--diff-modified {
+  border-color: var(--diff-modified);
+}
+
 /* Branch comparison: colour and symbol, never colour alone. */
 .table-node--diff-added {
   border-color: var(--diff-added);
