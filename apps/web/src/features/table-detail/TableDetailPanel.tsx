@@ -153,6 +153,15 @@ export function TableDetailPanel({
           <X />
         </IconButton>
       </header>
+      {table.file && (
+        <p
+          className="flex shrink-0 gap-1 border-b px-4 py-2 font-mono text-xs text-muted-foreground"
+          title={table.file}
+        >
+          <span className="sr-only">{t('file')}</span>
+          <span className="min-w-0 truncate">{table.file}</span>
+        </p>
+      )}
       <div className="min-h-0 flex-1 overflow-y-auto">
         {onHubChange && (
           <div className="flex items-center gap-2 border-b px-4 py-2.5">

@@ -113,6 +113,27 @@ describe('TableDetailPanel', () => {
     ).toBeTruthy()
   })
 
+  it('shows the file declaring the table, labelled, and nothing without one', async () => {
+    const posts = schema.tables.posts as Table
+    const withFile = {
+      ...schema,
+      tables: { posts: { ...posts, file: 'src/db/schema/tickets.ts' } },
+    }
+    const { unmount } = render(
+      <TableDetailPanel schema={withFile} tableName="posts" onClose={vi.fn()} />,
+    )
+    const path = screen.getByText('src/db/schema/tickets.ts')
+    expect(path.closest('p')?.textContent).toContain('File')
+    expect(screen.getByText('File')).toBeTruthy()
+    expect(path.closest('p')?.getAttribute('title')).toBe('src/db/schema/tickets.ts')
+    await act(() => i18n.changeLanguage('fr'))
+    expect(screen.getByText('Fichier')).toBeTruthy()
+    await act(() => i18n.changeLanguage('en'))
+    unmount()
+    renderPanel()
+    expect(screen.queryByText('File')).toBeNull()
+  })
+
   it('shows nothing for a table named like an Object member', () => {
     const { container } = render(
       <TableDetailPanel schema={schema} tableName="constructor" onClose={vi.fn()} />,

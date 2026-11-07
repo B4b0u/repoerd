@@ -3,6 +3,7 @@ import type { Catalog } from '../en'
 export const detail: Catalog['detail'] = {
   label: 'Détails de {{table}}',
   close: 'Fermer les détails',
+  file: 'Fichier',
   sections: {
     columns: 'Colonnes',
     indexes: 'Index',
