@@ -20,6 +20,26 @@ export const groups = {
   collapseGroup: 'Collapse the group {{name}}',
   expandGroup: 'Expand the group {{name}}',
   undo: 'Undo',
+  /** The editor a frame label opens (push right). */
+  editor: {
+    open: 'Edit the group {{name}}',
+    name: 'Name',
+    rename: 'Rename',
+    color: 'Color',
+    swatch: 'Color {{n}}',
+    custom: 'Custom color',
+    delete: 'Delete the group',
+    deleteHint: 'Its tables become ungrouped.',
+  },
+  /** The group of a table in its details. */
+  detail: {
+    label: 'Group',
+    followFile: 'Follow its file',
+    newGroup: 'New group…',
+    newName: 'Name of the new group',
+    create: 'Create',
+    cancel: 'Cancel',
+  },
   notices: {
     deleted: 'Group "{{name}}" deleted.',
     placed_one: '{{count}} table placed in "{{name}}".',

@@ -1,18 +1,25 @@
 // @vitest-environment jsdom
+import type { TableGroupsResponse } from '@repoerd/contracts'
 import {
   type Column,
   type DbSchema,
   deriveRelationships,
   diffSchemas,
+  GROUP_PALETTE,
   type Table,
   unionSchema,
 } from '@repoerd/model'
-import { act, cleanup, render, screen, within } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { GroupSelect } from '../../src/features/diagram/groups/GroupSelect'
+import { GroupEditingProvider } from '../../src/features/diagram/groups/group-editing'
+import { buildGroupView } from '../../src/features/diagram/groups/group-view'
 import { useViewState } from '../../src/features/diagram/view-state'
 import { TableDetailPanel } from '../../src/features/table-detail/TableDetailPanel'
 import { i18n } from '../../src/shared/i18n/i18n'
+import { fakeGroupsServer } from '../groups-server'
+import { renderWithApp } from '../render'
 
 afterEach(async () => {
   cleanup()
@@ -343,5 +350,184 @@ describe('TableDetailPanel hub checkbox', () => {
     expect(window.location.search).toContain('hubs=posts')
     await userEvent.click(screen.getByRole('checkbox', { name: 'Treat as hub table' }))
     expect(window.location.search).toMatch(/hubs=(&|$)/)
+  })
+})
+
+describe('TableDetailPanel group', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  const plain = (name: string, file: string): Table => ({
+    name,
+    schema: null,
+    comment: null,
+    columns: [],
+    indexes: [],
+    constraints: [],
+    file,
+  })
+  const grouped: DbSchema = {
+    tables: {
+      posts: plain('posts', 'db/posts.ts'),
+      comments: plain('comments', 'db/posts.ts'),
+      tags: plain('tags', 'db/tags.ts'),
+      notes: plain('notes', 'db/notes.ts'),
+    },
+    enums: {},
+    relationships: [],
+  }
+  const content = {
+    id: 'content',
+    name: 'content',
+    color: GROUP_PALETTE[0] as string,
+    origins: [{ kind: 'file' as const, path: 'db/posts.ts' }],
+  }
+  const misc = {
+    id: 'misc',
+    name: 'misc',
+    color: GROUP_PALETTE[1] as string,
+    origins: [{ kind: 'file' as const, path: 'db/tags.ts' }],
+  }
+  const saved: Omit<TableGroupsResponse, 'canEdit'> = {
+    configured: true,
+    groups: [content, misc],
+    assignments: {},
+  }
+
+  function renderGrouped(
+    state: Omit<TableGroupsResponse, 'canEdit'> = saved,
+    { canEdit = true, table = 'posts' } = {},
+  ) {
+    const server = fakeGroupsServer(state, { canEdit })
+    const response = { ...state, canEdit }
+    renderWithApp(
+      <GroupEditingProvider
+        repo={{ owner: 'acme', name: 'shop' }}
+        sourceId="db"
+        schema={grouped}
+        view={buildGroupView(grouped, response)}
+        saved={response}
+      >
+        <TableDetailPanel
+          schema={grouped}
+          tableName={table}
+          onClose={vi.fn()}
+          group={<GroupSelect table={table} />}
+        />
+      </GroupEditingProvider>,
+      server.client,
+    )
+    return server
+  }
+
+  const PATCH = '/api/repos/acme/shop/groups-assignments?source=db'
+
+  async function choose(option: string) {
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('combobox', { name: 'Group' }))
+    await user.click(await screen.findByRole('option', { name: option }))
+    return user
+  }
+
+  it('shows the group of the table and places it in another one', async () => {
+    const server = renderGrouped()
+    const select = screen.getByRole('combobox', { name: 'Group' })
+    expect(select.textContent).toContain('content')
+    const user = userEvent.setup()
+    await user.click(select)
+    const options = (await screen.findAllByRole('option')).map((o) => o.textContent)
+    // No "Follow its file": the table already does.
+    expect(options).toEqual(['content', 'misc', 'Ungrouped', 'New group…'])
+    await user.click(screen.getByRole('option', { name: 'misc' }))
+    await waitFor(() => expect(server.sent).toHaveLength(1))
+    expect(server.sent[0]).toEqual({
+      method: 'PATCH',
+      path: PATCH,
+      body: { assignments: { posts: 'misc' }, clear: [] },
+    })
+    expect(await screen.findByText('1 table placed in "misc".')).toBeTruthy()
+  })
+
+  it('gives a table placed by hand back to its file', async () => {
+    const server = renderGrouped({ ...saved, assignments: { posts: 'misc' } })
+    expect(screen.getByRole('combobox', { name: 'Group' }).textContent).toContain('misc')
+    await choose('Follow its file')
+    await waitFor(() => expect(server.sent).toHaveLength(1))
+    expect(server.sent[0]).toEqual({
+      method: 'PATCH',
+      path: PATCH,
+      body: { assignments: {}, clear: ['posts'] },
+    })
+  })
+
+  it('takes the table out of any group', async () => {
+    const server = renderGrouped()
+    await choose('Ungrouped')
+    await waitFor(() => expect(server.sent).toHaveLength(1))
+    expect(server.sent[0]?.body).toEqual({ assignments: { posts: null }, clear: [] })
+  })
+
+  it('creates a group and places the table in it, as one gesture', async () => {
+    const server = renderGrouped()
+    const user = await choose('New group…')
+    const name = screen.getByRole('textbox', { name: 'Name of the new group' })
+    await waitFor(() => expect(document.activeElement).toBe(name))
+    expect((screen.getByRole('button', { name: 'Create' }) as HTMLButtonElement).disabled).toBe(
+      true,
+    )
+    await user.type(name, ' Archive {Enter}')
+    await waitFor(() => expect(server.sent).toHaveLength(2))
+    const [created, placed] = server.sent
+    const id = created?.path.match(/\/groups\/([^?]+)\?/)?.[1] as string
+    expect(created).toEqual({
+      method: 'PUT',
+      path: `/api/repos/acme/shop/groups/${id}?source=db`,
+      body: { name: 'Archive', color: GROUP_PALETTE[2], origins: [] },
+    })
+    expect(placed).toEqual({
+      method: 'PATCH',
+      path: PATCH,
+      body: { assignments: { posts: id }, clear: [] },
+    })
+    // One gesture: one notice, one undo.
+    expect(await screen.findAllByText('1 table placed in "Archive".')).toHaveLength(1)
+    expect(screen.queryByRole('textbox', { name: 'Name of the new group' })).toBeNull()
+  })
+
+  it('shows the group as text, without any control, without the push right', () => {
+    renderGrouped(saved, { canEdit: false })
+    expect(screen.queryByRole('combobox')).toBeNull()
+    expect(screen.getByText('content').closest('p')?.textContent).toContain('Group')
+  })
+
+  it('says "Ungrouped" for a table in no group, without the push right', () => {
+    renderGrouped(saved, { canEdit: false, table: 'notes' })
+    expect(screen.getByText('Ungrouped').closest('p')?.textContent).toContain('Group')
+  })
+
+  it('says it in French', async () => {
+    await act(() => i18n.changeLanguage('fr'))
+    renderGrouped({ ...saved, assignments: { posts: 'misc' } })
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('combobox', { name: 'Groupe' }))
+    const options = (await screen.findAllByRole('option')).map((o) => o.textContent)
+    expect(options).toEqual([
+      "D'après son fichier",
+      'content',
+      'misc',
+      'Hors groupe',
+      'Nouveau groupe…',
+    ])
+  })
+
+  it('shows nothing about groups outside the diagram workspace', () => {
+    render(
+      <TableDetailPanel
+        schema={grouped}
+        tableName="posts"
+        onClose={vi.fn()}
+        group={<GroupSelect table="posts" />}
+      />,
+    )
+    expect(screen.queryByText('Group')).toBeNull()
   })
 })

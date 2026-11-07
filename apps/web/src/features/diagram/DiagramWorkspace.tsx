@@ -15,6 +15,8 @@ import { TableDetailPanel } from '../table-detail/TableDetailPanel'
 import { TableListPane } from '../table-list/TableListPane'
 import { DiagramCanvas } from './DiagramCanvas'
 import { useTableGroups } from './groups/api'
+import { GroupSelect } from './groups/GroupSelect'
+import { GroupEditingProvider } from './groups/group-editing'
 import { buildGroupView } from './groups/group-view'
 import { hiddenHubRelationships, hubViewSchema, resolveHubs } from './hubs'
 import { relatedTableNames } from './layout/related'
@@ -210,95 +212,104 @@ function Workspace({
   }
 
   return (
-    <div className="absolute inset-0 flex">
-      <TableListPane
-        schema={schema}
-        hidden={canvasHidden}
-        active={tables.active}
-        onToggle={toggle}
-        onShowAll={showAll}
-        onHideAll={() => setHidden(new Set(names))}
-        onSelect={select}
-        groups={groups}
-        onSetHidden={setTablesHidden}
-        changes={
-          diff && {
-            label: t('panel.tab', { count: changedTables(diff).length + diff.enums.length }),
-            content: (
-              <ChangesPanel
-                diff={diff}
-                active={tables.active}
-                onlyChanged={changedOnly}
-                onOnlyChangedChange={(next) =>
-                  updateView({ changed: next || undefined }, { replace: true })
-                }
-                onSelect={select}
-              />
-            ),
+    <GroupEditingProvider
+      repo={repo}
+      sourceId={sourceId}
+      schema={schema}
+      view={groups}
+      saved={groupsQuery.data}
+    >
+      <div className="absolute inset-0 flex">
+        <TableListPane
+          schema={schema}
+          hidden={canvasHidden}
+          active={tables.active}
+          onToggle={toggle}
+          onShowAll={showAll}
+          onHideAll={() => setHidden(new Set(names))}
+          onSelect={select}
+          groups={groups}
+          onSetHidden={setTablesHidden}
+          changes={
+            diff && {
+              label: t('panel.tab', { count: changedTables(diff).length + diff.enums.length }),
+              content: (
+                <ChangesPanel
+                  diff={diff}
+                  active={tables.active}
+                  onlyChanged={changedOnly}
+                  onOnlyChangedChange={(next) =>
+                    updateView({ changed: next || undefined }, { replace: true })
+                  }
+                  onSelect={select}
+                />
+              ),
+            }
           }
-        }
-      />
-      <div className="relative min-w-0 flex-1">
-        {tables.focus ? (
-          <RelatedCanvas
-            key={`${tables.focus}:${mode}`}
+        />
+        <div className="relative min-w-0 flex-1">
+          {tables.focus ? (
+            <RelatedCanvas
+              key={`${tables.focus}:${mode}`}
+              schema={schema}
+              focus={tables.focus}
+              mode={mode}
+              onModeChange={changeMode}
+              active={tables.active}
+              hidden={canvasHidden}
+              diff={diff}
+              onActivate={activate}
+              onBack={backToFullSchema}
+              hiddenHubEdges={hiddenHubEdges}
+              hubs={hubs}
+              hubLinks={viewState.hubLinks}
+              onHubLinksChange={changeHubLinks}
+              groups={groups}
+            />
+          ) : (
+            <DiagramCanvas
+              key={mode}
+              repo={repo}
+              schema={schema}
+              sourceId={sourceId}
+              inheritLayout={inheritLayout}
+              mode={mode}
+              onModeChange={changeMode}
+              active={tables.active}
+              hidden={canvasHidden}
+              diff={diff}
+              onActivate={activate}
+              centerOn={centerAfterRemount}
+              onCentered={() => setCenterAfterRemount(undefined)}
+              hiddenHubEdges={hiddenHubEdges}
+              hubs={hubs}
+              hubLinks={viewState.hubLinks}
+              onHubLinksChange={changeHubLinks}
+              groups={groups}
+              onRepropose={canRepropose ? () => setReproposedFor(sourceId) : undefined}
+              onLeaveReproposal={() => setReproposedFor(undefined)}
+            />
+          )}
+        </div>
+        {tables.active && (
+          <TableDetailPanel
             schema={schema}
-            focus={tables.focus}
-            mode={mode}
-            onModeChange={changeMode}
-            active={tables.active}
-            hidden={canvasHidden}
-            diff={diff}
-            onActivate={activate}
-            onBack={backToFullSchema}
-            hiddenHubEdges={hiddenHubEdges}
-            hubs={hubs}
-            hubLinks={viewState.hubLinks}
-            onHubLinksChange={changeHubLinks}
-            groups={groups}
-          />
-        ) : (
-          <DiagramCanvas
-            key={mode}
-            repo={repo}
-            schema={schema}
-            sourceId={sourceId}
-            inheritLayout={inheritLayout}
-            mode={mode}
-            onModeChange={changeMode}
-            active={tables.active}
-            hidden={canvasHidden}
-            diff={diff}
-            onActivate={activate}
-            centerOn={centerAfterRemount}
-            onCentered={() => setCenterAfterRemount(undefined)}
-            hiddenHubEdges={hiddenHubEdges}
-            hubs={hubs}
-            hubLinks={viewState.hubLinks}
-            onHubLinksChange={changeHubLinks}
-            groups={groups}
-            onRepropose={canRepropose ? () => setReproposedFor(sourceId) : undefined}
-            onLeaveReproposal={() => setReproposedFor(undefined)}
-          />
+            tableName={tables.active}
+            onClose={() => activate(undefined)}
+            diff={diff?.tables[tables.active]}
+            isHub={hubs.includes(tables.active)}
+            onHubChange={(on) => toggleHub(tables.active as string, on)}
+            group={<GroupSelect key={tables.active} table={tables.active} />}
+          >
+            <RelatedTablesPreview
+              schema={schema}
+              table={tables.active}
+              diff={diff}
+              onOpen={() => openRelated(tables.active as string)}
+            />
+          </TableDetailPanel>
         )}
       </div>
-      {tables.active && (
-        <TableDetailPanel
-          schema={schema}
-          tableName={tables.active}
-          onClose={() => activate(undefined)}
-          diff={diff?.tables[tables.active]}
-          isHub={hubs.includes(tables.active)}
-          onHubChange={(on) => toggleHub(tables.active as string, on)}
-        >
-          <RelatedTablesPreview
-            schema={schema}
-            table={tables.active}
-            diff={diff}
-            onOpen={() => openRelated(tables.active as string)}
-          />
-        </TableDetailPanel>
-      )}
-    </div>
+    </GroupEditingProvider>
   )
 }

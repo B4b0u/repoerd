@@ -1,8 +1,11 @@
-import { ViewportPortal } from '@xyflow/react'
-import { type CSSProperties, useMemo, useState } from 'react'
+import { useReactFlow, useStoreApi, ViewportPortal } from '@xyflow/react'
+import { type CSSProperties, type FocusEvent, useMemo, useState } from 'react'
+import { motionDuration } from '../../../shared/lib/motion'
 import { useThemeContext } from '../../../shared/theme/theme-context'
 import type { NodeGroup, TableFlowNode } from '../model/to-flow'
+import { GroupLabelEditor } from './GroupLabelEditor'
 import { type GroupColors, groupColors } from './group-colors'
+import { useGroupEditing } from './group-editing'
 import { type Box, classifyMembers, type GroupFrame, groupFrames } from './group-frames'
 import type { GroupView } from './group-view'
 
@@ -102,11 +105,37 @@ export function useGroupDisplay(
  * The frames, drawn in the canvas's own coordinates under the cards. They are not React Flow
  * nodes, so they stay out of the highlight, the mini map, `fitView` and table clicks. The
  * labels are siblings of the frames, not children: in the overview they rise above the cards
- * (see diagram.css), which a frame's own stacking context would prevent.
+ * (see diagram.css), which a frame's own stacking context would prevent. With the editing
+ * commands, a label is a button that opens the group's editor; otherwise it is inert text.
  */
 export function GroupFrames({ frames, proposed }: { frames: DrawnFrame[]; proposed: boolean }) {
   const { theme } = useThemeContext()
+  const editing = useGroupEditing()
+  const flow = useReactFlow()
+  const store = useStoreApi()
   if (frames.length === 0) return null
+
+  // A label reached with Tab outside the visible canvas: bring it into view, at the same zoom.
+  const reveal = (event: FocusEvent<HTMLButtonElement>) => {
+    const pane = store.getState().domNode?.getBoundingClientRect()
+    if (!pane || !event.currentTarget.matches(':focus-visible')) return
+    const label = event.currentTarget.getBoundingClientRect()
+    const visible =
+      label.left >= pane.left &&
+      label.right <= pane.right &&
+      label.top >= pane.top &&
+      label.bottom <= pane.bottom
+    if (visible) return
+    const center = flow.screenToFlowPosition({
+      x: label.left + label.width / 2,
+      y: label.top + label.height / 2,
+    })
+    void flow.setCenter(center.x, center.y, {
+      zoom: flow.getZoom(),
+      duration: motionDuration(200),
+    })
+  }
+
   return (
     <ViewportPortal>
       {frames.map((frame) => {
@@ -130,22 +159,33 @@ export function GroupFrames({ frames, proposed }: { frames: DrawnFrame[]; propos
       })}
       {frames.map((frame) => {
         const colors: GroupColors = frame.colors[theme]
-        return (
-          <span
+        const label = {
+          className: 'group-frame__label',
+          'data-label-of': frame.groupId,
+          title: frame.name,
+          style: {
+            '--frame-x': `${frame.x}px`,
+            '--frame-y': `${frame.y}px`,
+            '--frame-width': `${frame.width}px`,
+            background: colors.label,
+            color: colors.labelText,
+          } as CSSProperties,
+        }
+        const group = editing?.editable
+          ? editing.view.groups.find((g) => g.id === frame.groupId)
+          : undefined
+        return editing && group ? (
+          <GroupLabelEditor
             key={frame.groupId}
-            className="group-frame__label"
-            data-label-of={frame.groupId}
-            title={frame.name}
-            style={
-              {
-                '--frame-x': `${frame.x}px`,
-                '--frame-y': `${frame.y}px`,
-                '--frame-width': `${frame.width}px`,
-                background: colors.label,
-                color: colors.labelText,
-              } as CSSProperties
-            }
+            group={group}
+            editing={editing}
+            onFocus={reveal}
+            {...label}
           >
+            {frame.name}
+          </GroupLabelEditor>
+        ) : (
+          <span key={frame.groupId} {...label}>
             {frame.name}
           </span>
         )

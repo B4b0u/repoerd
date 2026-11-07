@@ -231,8 +231,9 @@
   border-style: dashed;
 }
 
-/* Inert for now, but it can be hovered (its title shows a long name in full). Placed on its
-   frame through --frame-x, --frame-y and --frame-width; drawn after the frames, under the cards. */
+/* Inert text, or a button opening the group's editor with the push right; either way it can be
+   hovered (its title shows a long name in full). Placed on its frame through --frame-x,
+   --frame-y and --frame-width; drawn after the frames, under the cards. */
 .group-frame__label {
   box-sizing: border-box;
   position: absolute;
@@ -251,6 +252,17 @@
   transform: translate(calc(var(--frame-x) + 12px), calc(var(--frame-y) + 4px));
   pointer-events: auto;
   cursor: default;
+}
+
+button.group-frame__label {
+  border: 0;
+  cursor: pointer;
+}
+
+/* A steady ring on screen, whatever the zoom. */
+button.group-frame__label:focus-visible {
+  outline: calc(2px / var(--canvas-zoom, 1)) solid var(--ring);
+  outline-offset: calc(2px / var(--canvas-zoom, 1));
 }
 
 /* Semantic zoom: the schema reads as a map of domains. The group names grow like the table

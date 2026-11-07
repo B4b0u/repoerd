@@ -25,6 +25,8 @@ interface Props {
   diff?: TableDiff
   isHub?: boolean
   onHubChange?: (next: boolean) => void
+  /** The table's group, under its file. */
+  group?: ReactNode
 }
 
 const TRAIT_STYLES: Record<ColumnTrait, string> = {
@@ -122,6 +124,7 @@ export function TableDetailPanel({
   diff,
   isHub,
   onHubChange,
+  group,
 }: Props) {
   const { t } = useTranslation('detail')
   const { t: tCompare } = useTranslation('compare')
@@ -162,6 +165,7 @@ export function TableDetailPanel({
           <span className="min-w-0 truncate">{table.file}</span>
         </p>
       )}
+      {group}
       <div className="min-h-0 flex-1 overflow-y-auto">
         {onHubChange && (
           <div className="flex items-center gap-2 border-b px-4 py-2.5">
