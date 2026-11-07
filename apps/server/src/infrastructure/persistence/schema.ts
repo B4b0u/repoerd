@@ -1,4 +1,10 @@
-import type { DbSchema, DetectedSource, DisplayMode, ManualSource } from '@repoerd/model'
+import type {
+  DbSchema,
+  DetectedSource,
+  DisplayMode,
+  GroupOrigin,
+  ManualSource,
+} from '@repoerd/model'
 import { sql } from 'drizzle-orm'
 import { index, integer, primaryKey, real, sqliteTable, text } from 'drizzle-orm/sqlite-core'
 
@@ -136,4 +142,46 @@ export const blobCache = sqliteTable(
     createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().default(sql`0`),
   },
   (table) => [index('blob_cache_created_at_idx').on(table.createdAt)],
+)
+
+/** Marks a (repository, source) as configured: "never configured" and "configured, empty" differ. */
+export const tableGroupConfigs = sqliteTable(
+  'table_group_configs',
+  {
+    /** The repository's GitHub id. */
+    repo: text('repo').notNull(),
+    sourceId: text('source_id').notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+    /** User id; plain text, not a foreign key: groups are team data that outlive their author. */
+    updatedBy: text('updated_by'),
+  },
+  (table) => [primaryKey({ columns: [table.repo, table.sourceId] })],
+)
+
+export const tableGroups = sqliteTable(
+  'table_groups',
+  {
+    repo: text('repo').notNull(),
+    sourceId: text('source_id').notNull(),
+    groupId: text('group_id').notNull(),
+    position: integer('position').notNull(),
+    name: text('name').notNull(),
+    color: text('color').notNull(),
+    origins: text('origins', { mode: 'json' }).$type<GroupOrigin[]>().notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+    updatedBy: text('updated_by'),
+  },
+  (table) => [primaryKey({ columns: [table.repo, table.sourceId, table.groupId] })],
+)
+
+export const tableGroupAssignments = sqliteTable(
+  'table_group_assignments',
+  {
+    repo: text('repo').notNull(),
+    sourceId: text('source_id').notNull(),
+    tableName: text('table_name').notNull(),
+    /** null: explicitly ungrouped. */
+    groupId: text('group_id'),
+  },
+  (table) => [primaryKey({ columns: [table.repo, table.sourceId, table.tableName] })],
 )
