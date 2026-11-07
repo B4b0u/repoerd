@@ -103,7 +103,7 @@
   box-sizing: border-box;
   position: relative;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
   padding: 0 12px;
@@ -115,14 +115,18 @@
   border-bottom: none;
 }
 
+/* The hub badge sits on the corner of the icon, so names stay aligned from row to row. */
 .table-node__marks {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 2px;
 }
 
 .table-node__hub-badge {
-  font-size: 10px;
+  position: absolute;
+  top: -5px;
+  right: -7px;
+  font-size: 9px;
   font-weight: 700;
   line-height: 1;
   color: var(--link);

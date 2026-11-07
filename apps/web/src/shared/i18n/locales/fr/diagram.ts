@@ -78,7 +78,7 @@ export const diagram: Catalog['diagram'] = {
     placing: 'Placement des tables…',
   },
   hub: {
-    links: 'Liens des tables pivots',
+    links: 'Liens des tables centrales',
     none: 'Aucun',
     first: 'Premier ordre',
     all: 'Tous',

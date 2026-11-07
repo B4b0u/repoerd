@@ -131,6 +131,18 @@ describe('highlightFlow', () => {
     })
     expect(result.nodes.find((n) => n.id === 'users')?.data.hubBadges).toBeUndefined()
   })
+
+  it('shows a hidden hub edge again while the hub or the child is focused', () => {
+    const hubEdge = flow.edges.find((e) => e.source === 'users')
+    const hiddenHubEdges = new Set([hubEdge?.id ?? ''])
+    const edgeWith = (input: { active?: string; hovered?: string }) =>
+      highlightFlow(flow.nodes, flow.edges, { ...input, hidden: none, hiddenHubEdges }).edges.find(
+        (e) => e.id === hubEdge?.id,
+      )
+    expect(edgeWith({ active: 'users' })?.hidden).toBe(false)
+    expect(edgeWith({ hovered: 'posts' })?.hidden).toBe(false)
+    expect(edgeWith({ active: 'tags' })?.hidden).toBe(true)
+  })
 })
 
 describe('createHighlighter', () => {

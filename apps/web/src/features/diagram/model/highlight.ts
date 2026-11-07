@@ -18,7 +18,7 @@ export interface HighlightInput {
   active?: string
   hovered?: string
   hidden: ReadonlySet<string>
-  /** Relationship edge ids whose hub links are drawn hidden. */
+  /** Relationship edge ids whose hub links are hidden, unless they touch the focused table. */
   hiddenHubEdges?: ReadonlySet<string>
 }
 
@@ -99,7 +99,8 @@ export function highlightFlow(
       const touchesFocus = focus !== undefined && (edge.source === focus || edge.target === focus)
       return {
         ...edge,
-        hidden: isHidden(edge) || (hiddenHubEdges?.has(edge.id) ?? false),
+        // A hidden hub link comes back while one of its tables is hovered or selected.
+        hidden: isHidden(edge) || (!touchesFocus && (hiddenHubEdges?.has(edge.id) ?? false)),
         animated: touchesFocus && focus === active,
         className: !focus
           ? undefined

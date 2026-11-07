@@ -25,5 +25,5 @@ export const detail: Catalog['detail'] = {
   default: 'Valeur par défaut',
   noIndex: 'Aucun index.',
   noConstraint: 'Aucune contrainte.',
-  treatAsHub: 'Traiter comme table pivot',
+  treatAsHub: 'Traiter comme table centrale',
 }
