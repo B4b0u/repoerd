@@ -128,3 +128,91 @@ export function proposeGroups(schema: DbSchema): TableGroup[] {
       origins: [origin],
     }))
 }
+
+const assignmentOf = (config: TableGroupConfig, table: string): string | null | undefined =>
+  Object.hasOwn(config.assignments, table) ? config.assignments[table] : undefined
+
+/**
+ * Group of every table of the schema: manual placement, else the most precise matching
+ * origin (file > folder > pgSchema), else null. A placement to an unknown group is ignored.
+ */
+export function resolveTableGroups(
+  schema: DbSchema,
+  config: TableGroupConfig,
+): Map<string, string | null> {
+  const known = new Set(config.groups.map((g) => g.id))
+  const fileOwner = new Map<string, string>()
+  const folderOwner = new Map<string, string>()
+  const pgSchemaOwner = new Map<string, string>()
+  for (const g of config.groups) {
+    for (const o of g.origins) {
+      const owners =
+        o.kind === 'file' ? fileOwner : o.kind === 'folder' ? folderOwner : pgSchemaOwner
+      const key = o.kind === 'pgSchema' ? o.name : o.path
+      if (!owners.has(key)) owners.set(key, g.id)
+    }
+  }
+  const folders = [...folderOwner.keys()].sort((a, b) => b.length - a.length)
+
+  const resolved = new Map<string, string | null>()
+  for (const table of Object.values(schema.tables)) {
+    const manual = assignmentOf(config, table.name)
+    if (manual === null || (manual !== undefined && known.has(manual))) {
+      resolved.set(table.name, manual)
+      continue
+    }
+    const file = table.file
+    let id: string | undefined
+    if (file !== undefined) {
+      id = fileOwner.get(file)
+      if (id === undefined) {
+        const folder = folders.find((f) => file.startsWith(`${f}/`))
+        if (folder !== undefined) id = folderOwner.get(folder)
+      }
+    }
+    id ??= pgSchemaOwner.get(table.schema ?? 'public')
+    resolved.set(table.name, id ?? null)
+  }
+  return resolved
+}
+
+/**
+ * Adds to group G every file all of whose tables (in this schema) are placed by hand in G,
+ * and removes that file origin from any other group.
+ */
+export function adoptOrigins(schema: DbSchema, config: TableGroupConfig): TableGroupConfig {
+  const known = new Set(config.groups.map((g) => g.id))
+  const byFile = new Map<string, string[]>()
+  for (const table of Object.values(schema.tables)) {
+    if (table.file === undefined) continue
+    byFile.set(table.file, [...(byFile.get(table.file) ?? []), table.name])
+  }
+  const adopted = new Map<string, string>()
+  for (const [file, names] of byFile) {
+    const owner = assignmentOf(config, names[0] as string)
+    if (typeof owner !== 'string' || !known.has(owner)) continue
+    if (names.every((n) => assignmentOf(config, n) === owner)) adopted.set(file, owner)
+  }
+  const groups = config.groups.map((g) => {
+    const origins = g.origins.filter(
+      (o) => o.kind !== 'file' || adopted.get(o.path) === undefined || adopted.get(o.path) === g.id,
+    )
+    for (const [path, owner] of adopted) {
+      if (owner === g.id && !origins.some((o) => o.kind === 'file' && o.path === path)) {
+        origins.push({ kind: 'file', path })
+      }
+    }
+    return { ...g, origins }
+  })
+  return { groups, assignments: config.assignments }
+}
+
+/** The config without the group: its manual placements are dropped. */
+export function withoutGroup(config: TableGroupConfig, groupId: string): TableGroupConfig {
+  return {
+    groups: config.groups.filter((g) => g.id !== groupId),
+    assignments: Object.fromEntries(
+      Object.entries(config.assignments).filter(([, id]) => id !== groupId),
+    ),
+  }
+}

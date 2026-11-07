@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { GROUP_PALETTE, proposalId, proposeGroups, TABLE_GROUP_LIMITS } from '../src/groups.js'
+import {
+  adoptOrigins,
+  GROUP_PALETTE,
+  proposalId,
+  proposeGroups,
+  resolveTableGroups,
+  TABLE_GROUP_LIMITS,
+  type TableGroup,
+  type TableGroupConfig,
+  withoutGroup,
+} from '../src/groups.js'
 import type { DbSchema, Table } from '../src/schema.js'
 
 const table = (name: string, file?: string, schema: string | null = null): Table => ({
@@ -130,5 +140,138 @@ describe('constants', () => {
     expect(GROUP_PALETTE).toHaveLength(12)
     expect(new Set(GROUP_PALETTE).size).toBe(12)
     for (const c of GROUP_PALETTE) expect(c).toMatch(/^#[0-9a-f]{6}$/)
+  })
+})
+
+const group = (id: string, ...origins: TableGroup['origins']): TableGroup => ({
+  id,
+  name: id,
+  color: '#e6194b',
+  origins,
+})
+const cfg = (
+  groups: TableGroup[],
+  assignments: Record<string, string | null> = {},
+): TableGroupConfig => ({ groups, assignments })
+
+describe('resolveTableGroups', () => {
+  it('prefers a manual placement over the origin, and null means ungrouped', () => {
+    const schema = schemaOf(table('a', 'src/a.ts'), table('b', 'src/b.ts'), table('c', 'src/c.ts'))
+    const config = cfg([group('g1', { kind: 'folder', path: 'src' }), group('g2')], {
+      a: 'g2',
+      b: null,
+    })
+    const resolved = resolveTableGroups(schema, config)
+    expect(resolved.get('a')).toBe('g2')
+    expect(resolved.get('b')).toBeNull()
+    expect(resolved.get('c')).toBe('g1')
+  })
+
+  it('prefers file over folder, and the longest folder over a shorter one', () => {
+    const schema = schemaOf(
+      table('refunds', 'src/domains/billing/refunds.ts'),
+      table('invoices', 'src/domains/billing/invoices.ts'),
+      table('users', 'src/domains/identity/users.ts'),
+    )
+    const config = cfg([
+      group('wide', { kind: 'folder', path: 'src' }),
+      group('folder', { kind: 'folder', path: 'src/domains/billing' }),
+      group('file', { kind: 'file', path: 'src/domains/billing/refunds.ts' }),
+    ])
+    const resolved = resolveTableGroups(schema, config)
+    expect(resolved.get('refunds')).toBe('file')
+    expect(resolved.get('invoices')).toBe('folder')
+    expect(resolved.get('users')).toBe('wide')
+  })
+
+  it('matches folders on whole segments', () => {
+    const schema = schemaOf(table('a', 'src/billing2/a.ts'))
+    const resolved = resolveTableGroups(
+      schema,
+      cfg([group('g', { kind: 'folder', path: 'src/billing' })]),
+    )
+    expect(resolved.get('a')).toBeNull()
+  })
+
+  it('lets only a pgSchema origin place a table without file', () => {
+    const schema = schemaOf(table('a', undefined, 'auth'), table('b'), table('c', 'x/c.ts', 'auth'))
+    const config = cfg([
+      group('f', { kind: 'folder', path: 'x' }),
+      group('auth', { kind: 'pgSchema', name: 'auth' }),
+      group('pub', { kind: 'pgSchema', name: 'public' }),
+    ])
+    const resolved = resolveTableGroups(schema, config)
+    expect(resolved.get('a')).toBe('auth')
+    expect(resolved.get('b')).toBe('pub')
+    expect(resolved.get('c')).toBe('f')
+  })
+
+  it('ignores a placement to an unknown group and follows the origin', () => {
+    const schema = schemaOf(table('a', 'src/a.ts'))
+    const config = cfg([group('g', { kind: 'file', path: 'src/a.ts' })], { a: 'ghost' })
+    expect(resolveTableGroups(schema, config).get('a')).toBe('g')
+  })
+
+  it('lets the first group win when two claim the same origin', () => {
+    const schema = schemaOf(table('a', 'src/a.ts'))
+    const o = { kind: 'file', path: 'src/a.ts' } as const
+    expect(resolveTableGroups(schema, cfg([group('first', o), group('second', o)])).get('a')).toBe(
+      'first',
+    )
+  })
+
+  it('does not read inherited keys as placements', () => {
+    const schema = schemaOf(table('constructor'))
+    expect(resolveTableGroups(schema, cfg([])).get('constructor')).toBeNull()
+  })
+})
+
+describe('adoptOrigins', () => {
+  const schema = schemaOf(
+    table('inv', 'src/invoicing.ts'),
+    table('pay', 'src/invoicing.ts'),
+    table('usr', 'src/users.ts'),
+  )
+  const file = { kind: 'file', path: 'src/invoicing.ts' } as const
+
+  it('adopts a file whose tables are all placed by hand in the group', () => {
+    const config = cfg([group('billing'), group('other')], { inv: 'billing', pay: 'billing' })
+    const out = adoptOrigins(schema, config)
+    expect(out.groups[0]?.origins).toEqual([file])
+    expect(out.assignments).toEqual(config.assignments)
+    expect(config.groups[0]?.origins).toEqual([])
+  })
+
+  it('does not adopt when only some tables of the file are placed', () => {
+    const out = adoptOrigins(schema, cfg([group('billing')], { inv: 'billing' }))
+    expect(out.groups[0]?.origins).toEqual([])
+  })
+
+  it('removes the file origin from other groups and never adds it twice', () => {
+    const config = cfg([group('billing', file), group('other', file)], {
+      inv: 'billing',
+      pay: 'billing',
+    })
+    const out = adoptOrigins(schema, config)
+    expect(out.groups[0]?.origins).toEqual([file])
+    expect(out.groups[1]?.origins).toEqual([])
+  })
+
+  it('ignores unknown groups and tables without file', () => {
+    const out = adoptOrigins(
+      schemaOf(table('inv', 'src/invoicing.ts'), table('nofile')),
+      cfg([group('billing')], { inv: 'ghost', nofile: 'billing' }),
+    )
+    expect(out.groups[0]?.origins).toEqual([])
+  })
+})
+
+describe('withoutGroup', () => {
+  it('drops the group and its placements, keeps the others', () => {
+    const config = cfg([group('a'), group('b')], { x: 'a', y: 'b', z: null })
+    const out = withoutGroup(config, 'a')
+    expect(out.groups.map((g) => g.id)).toEqual(['b'])
+    expect(out.assignments).toEqual({ y: 'b', z: null })
+    expect(config.groups).toHaveLength(2)
   })
 })
