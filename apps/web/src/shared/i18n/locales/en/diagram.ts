@@ -74,6 +74,14 @@ export const diagram = {
     displayMode: 'Display mode',
     placing: 'Placing tables…',
   },
+  hub: {
+    links: 'Hub links',
+    none: 'None',
+    first: 'First-order',
+    all: 'All',
+    firstHint: 'Hide the links of tables already reachable through another table',
+    badge: '→ {{table}}',
+  },
   displayModes: {
     ALL_FIELDS: 'All fields',
     KEYS_ONLY: 'Keys only',

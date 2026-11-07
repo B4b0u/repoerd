@@ -24,6 +24,8 @@ export type TableNodeData = {
   highlight: NodeHighlight
   /** Set in a comparison. */
   diff?: NodeDiff
+  /** Referencing columns whose hub edge is hidden: hub table name to show as a badge. */
+  hubBadges?: Readonly<Record<string, string>>
 }
 export type TableFlowNode = Node<TableNodeData, 'table'>
 export type RelationshipEdgeData = {
@@ -38,6 +40,14 @@ export const handleId = {
   target: (column: string) => `column:${column}:target`,
   tableSource: 'table:source',
   tableTarget: 'table:target',
+}
+
+/** Same id React Flow uses for each column of a relationship edge. */
+export function relationshipEdgeId(
+  relationship: Pick<Relationship, 'name' | 'to'>,
+  columnIndex: number,
+): string {
+  return `${relationship.to.table}.${relationship.name}:${columnIndex}`
 }
 
 /** In a comparison, `schema` is the union of both sides and `diff` says what changed. */
@@ -84,7 +94,7 @@ export function buildFlow(
       const referenced = relationship.from.columns[index]
       if (!referenced || !hasColumn(child, column) || !hasColumn(parent, referenced)) return
       edges.push({
-        id: `${child.name}.${relationship.name}:${index}`,
+        id: relationshipEdgeId(relationship, index),
         source: parent.name,
         sourceHandle: shown.get(parent.name)?.has(referenced)
           ? handleId.source(referenced)

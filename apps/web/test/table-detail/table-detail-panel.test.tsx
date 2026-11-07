@@ -10,6 +10,7 @@ import {
 import { act, cleanup, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { useViewState } from '../../src/features/diagram/view-state'
 import { TableDetailPanel } from '../../src/features/table-detail/TableDetailPanel'
 import { i18n } from '../../src/shared/i18n/i18n'
 
@@ -288,5 +289,36 @@ describe('TableDetailPanel in a comparison', () => {
     renderCompared()
     expect(screen.getByText('Valeurs nulles')).toBeTruthy()
     expect(screen.getByText('non nul', { selector: 'ins' })).toBeTruthy()
+  })
+})
+
+describe('TableDetailPanel hub checkbox', () => {
+  it('toggles the explicit hubs list in the URL', async () => {
+    window.history.replaceState(null, '', '/acme/shop')
+    function Probe() {
+      const [state, update] = useViewState('acme', 'shop')
+      const hubs = state.hubs ?? []
+      return (
+        <TableDetailPanel
+          schema={schema}
+          tableName="posts"
+          onClose={vi.fn()}
+          isHub={hubs.includes('posts')}
+          onHubChange={(on) => {
+            update(
+              { hubs: on ? [...hubs, 'posts'] : hubs.filter((name) => name !== 'posts') },
+              { replace: true },
+            )
+          }}
+        />
+      )
+    }
+    render(<Probe />)
+    const checkbox = screen.getByRole('checkbox', { name: 'Treat as hub table' })
+    expect(checkbox.getAttribute('aria-checked')).toBe('false')
+    await userEvent.click(checkbox)
+    expect(window.location.search).toContain('hubs=posts')
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Treat as hub table' }))
+    expect(window.location.search).toMatch(/hubs=(&|$)/)
   })
 })

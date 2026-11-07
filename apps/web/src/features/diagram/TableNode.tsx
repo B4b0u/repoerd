@@ -8,6 +8,16 @@ import { columnChangeTitle, type NodeDiff, typeChange } from './model/diff-view'
 import { HEADER_HEIGHT, ROW_HEIGHT, TABLE_NAME_HEIGHT, TABLE_WIDTH } from './model/dimensions'
 import { handleId, type TableFlowNode } from './model/to-flow'
 
+function HubColumnBadge({ table }: { table: string }) {
+  const { t } = useTranslation('diagram')
+  const label = t('hub.badge', { table })
+  return (
+    <span className="table-node__hub-badge" title={label} role="img" aria-label={label}>
+      →
+    </span>
+  )
+}
+
 function columnTitle(column: { name: string; type: string; notNull: boolean; isUnique: boolean }) {
   const traits = [column.notNull ? 'NOT NULL' : 'NULL', column.isUnique ? 'UNIQUE' : null]
   return `${column.name}: ${column.type} (${traits.filter(Boolean).join(', ')})`
@@ -81,6 +91,7 @@ export const TableNode = memo(function TableNode({ data }: NodeProps<TableFlowNo
             const status = changeOf(change?.status)
             const type = change ? typeChange(change) : null
             const title = [columnTitle(column), ...columnChangeTitle(change?.changes ?? [])]
+            const hub = data.hubBadges?.[column.name]
             return (
               <li
                 key={column.name}
@@ -102,11 +113,14 @@ export const TableNode = memo(function TableNode({ data }: NodeProps<TableFlowNo
                     {MARK[status]}
                   </span>
                 )}
-                <ColumnIcon
-                  isPrimaryKey={column.isPrimaryKey}
-                  isForeignKey={foreignKeys.has(column.name)}
-                  notNull={column.notNull}
-                />
+                <span className="table-node__marks">
+                  <ColumnIcon
+                    isPrimaryKey={column.isPrimaryKey}
+                    isForeignKey={foreignKeys.has(column.name)}
+                    notNull={column.notNull}
+                  />
+                  {hub && <HubColumnBadge table={hub} />}
+                </span>
                 <span className="table-node__name">{column.name}</span>
                 <span className="table-node__type">
                   {type ? `${type.before} → ${type.after}` : column.type}

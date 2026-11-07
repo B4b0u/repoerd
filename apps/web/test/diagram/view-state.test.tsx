@@ -157,3 +157,48 @@ describe('compact hidden tables in the URL', () => {
     )
   })
 })
+
+describe('hub tables in the URL', () => {
+  it('treats an absent hubs parameter as auto-detection', () => {
+    expect(parseViewState('?branch=main').hubs).toBeUndefined()
+    expect(viewStateSearch({ branch: 'main', hidden: [] }).includes('hubs')).toBe(false)
+  })
+
+  it('round-trips an explicit hub list, including an empty list', () => {
+    expect(parseViewState('?hubs=').hubs).toEqual([])
+    expect(viewStateSearch({ hidden: [], hubs: [] })).toBe('?hubs=')
+    const state = { hidden: [] as string[], hubs: ['organizations', 'tenants'] }
+    const search = viewStateSearch(state)
+    expect(parseViewState(search).hubs).toEqual(['organizations', 'tenants'])
+    expect(renderViewState(viewStatePath('acme', 'shop', state)).state?.hubs).toEqual([
+      'organizations',
+      'tenants',
+    ])
+  })
+
+  it('round-trips hubLinks none and first, and ignores other values', () => {
+    expect(parseViewState('?hubLinks=none').hubLinks).toBe('none')
+    expect(parseViewState('?hubLinks=first').hubLinks).toBe('first')
+    expect(parseViewState('?hubLinks=all').hubLinks).toBeUndefined()
+    expect(parseViewState('?hubLinks=other').hubLinks).toBeUndefined()
+    expect(viewStateSearch({ hidden: [], hubLinks: 'first' })).toBe('?hubLinks=first')
+    expect(viewStateSearch({ hidden: [], hubLinks: undefined }).includes('hubLinks')).toBe(false)
+  })
+
+  it('round-trips hubs and hubLinks next to the compact h parameter', () => {
+    const state = {
+      hidden: [] as string[],
+      compact: 's0-4.7',
+      hubs: ['organizations'],
+      hubLinks: 'none' as const,
+    }
+    const search = viewStateSearch(state)
+    expect(search).toBe('?h=s0-4.7&hubs=organizations&hubLinks=none')
+    expect(parseViewState(search)).toMatchObject({
+      compact: 's0-4.7',
+      hubs: ['organizations'],
+      hubLinks: 'none',
+    })
+    expect(renderViewState(viewStatePath('acme', 'shop', state)).state).toMatchObject(state)
+  })
+})

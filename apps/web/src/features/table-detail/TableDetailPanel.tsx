@@ -4,9 +4,11 @@ import { type ReactNode, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '../../shared/lib/utils'
 import { Badge } from '../../shared/ui/badge'
+import { Checkbox } from '../../shared/ui/checkbox'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../../shared/ui/collapsible'
 import { IconButton } from '../../shared/ui/IconButton'
 import { TableIcon } from '../../shared/ui/icons'
+import { Label } from '../../shared/ui/label'
 import { ColumnIcon } from '../diagram/ColumnIcon'
 import { changeOf, MARK, TONE } from '../diagram/model/change-marks'
 import { foreignKeyColumns } from '../diagram/model/display-mode'
@@ -21,6 +23,8 @@ interface Props {
   children?: ReactNode
   /** Comparison: what changed in this table (`schema` is the union of both sides). */
   diff?: TableDiff
+  isHub?: boolean
+  onHubChange?: (next: boolean) => void
 }
 
 const TRAIT_STYLES: Record<ColumnTrait, string> = {
@@ -110,7 +114,15 @@ function FieldChanges({ changes }: { changes: readonly FieldChange<AnyField>[] }
   )
 }
 
-export function TableDetailPanel({ schema, tableName, onClose, children, diff }: Props) {
+export function TableDetailPanel({
+  schema,
+  tableName,
+  onClose,
+  children,
+  diff,
+  isHub,
+  onHubChange,
+}: Props) {
   const { t } = useTranslation('detail')
   const { t: tCompare } = useTranslation('compare')
   // Own keys only: a URL naming "constructor" must not reach Object's members.
@@ -142,6 +154,18 @@ export function TableDetailPanel({ schema, tableName, onClose, children, diff }:
         </IconButton>
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto">
+        {onHubChange && (
+          <div className="flex items-center gap-2 border-b px-4 py-2.5">
+            <Checkbox
+              id="treat-as-hub"
+              checked={isHub === true}
+              onCheckedChange={(checked) => onHubChange(checked === true)}
+            />
+            <Label htmlFor="treat-as-hub" className="text-sm font-normal">
+              {t('treatAsHub')}
+            </Label>
+          </div>
+        )}
         {diff?.comment ? (
           <p className="border-b px-4 py-3 text-sm wrap-anywhere">
             <span className="text-muted-foreground">{tCompare('fields.comment')}</span>{' '}

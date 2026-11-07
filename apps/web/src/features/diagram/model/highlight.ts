@@ -18,13 +18,50 @@ export interface HighlightInput {
   active?: string
   hovered?: string
   hidden: ReadonlySet<string>
+  /** Relationship edge ids whose hub links are hidden, unless they touch the focused table. */
+  hiddenHubEdges?: ReadonlySet<string>
+}
+
+function columnFromTargetHandle(handle: string | null | undefined): string | undefined {
+  const prefix = 'column:'
+  const suffix = ':target'
+  if (!handle?.startsWith(prefix) || !handle.endsWith(suffix)) return undefined
+  return handle.slice(prefix.length, handle.length - suffix.length)
+}
+
+function hubBadgesFor(
+  edges: readonly RelationshipFlowEdge[],
+  hiddenHubEdges: ReadonlySet<string> | undefined,
+): Map<string, Record<string, string>> {
+  const badges = new Map<string, Record<string, string>>()
+  if (!hiddenHubEdges || hiddenHubEdges.size === 0) return badges
+  for (const edge of edges) {
+    if (!hiddenHubEdges.has(edge.id)) continue
+    const column = columnFromTargetHandle(edge.targetHandle)
+    if (!column) continue
+    const current = badges.get(edge.target) ?? {}
+    current[column] = edge.source
+    badges.set(edge.target, current)
+  }
+  return badges
+}
+
+function sameHubBadges(
+  a: Readonly<Record<string, string>> | undefined,
+  b: Readonly<Record<string, string>> | undefined,
+): boolean {
+  if (a === b) return true
+  if (!a || !b) return !a && !b
+  const keys = Object.keys(a)
+  if (keys.length !== Object.keys(b).length) return false
+  return keys.every((key) => a[key] === b[key])
 }
 
 /** Derives what the canvas displays from the flow and the current interaction state. */
 export function highlightFlow(
   nodes: TableFlowNode[],
   edges: RelationshipFlowEdge[],
-  { active, hovered, hidden }: HighlightInput,
+  { active, hovered, hidden, hiddenHubEdges }: HighlightInput,
 ): { nodes: TableFlowNode[]; edges: RelationshipFlowEdge[] } {
   const ids = new Set(nodes.map((node) => node.id))
   const focus = [hovered, active].find(
@@ -37,6 +74,7 @@ export function highlightFlow(
         focus,
       )
     : new Set<string>()
+  const badges = hubBadgesFor(edges, hiddenHubEdges)
 
   const stateOf = (id: string): NodeHighlight => {
     if (!focus) return 'none'
@@ -45,16 +83,24 @@ export function highlightFlow(
   }
 
   return {
-    nodes: nodes.map((node) => ({
-      ...node,
-      hidden: hidden.has(node.id),
-      data: { ...node.data, highlight: stateOf(node.id) },
-    })),
+    nodes: nodes.map((node) => {
+      const hubBadges = badges.get(node.id)
+      return {
+        ...node,
+        hidden: hidden.has(node.id),
+        data: {
+          ...node.data,
+          highlight: stateOf(node.id),
+          ...(hubBadges ? { hubBadges } : {}),
+        },
+      }
+    }),
     edges: edges.map((edge) => {
       const touchesFocus = focus !== undefined && (edge.source === focus || edge.target === focus)
       return {
         ...edge,
-        hidden: isHidden(edge),
+        // A hidden hub link comes back while one of its tables is hovered or selected.
+        hidden: isHidden(edge) || (!touchesFocus && (hiddenHubEdges?.has(edge.id) ?? false)),
         animated: touchesFocus && focus === active,
         className: !focus
           ? undefined
@@ -97,7 +143,10 @@ export function createHighlighter() {
           nodeCache,
           nodes[i] as TableFlowNode,
           node,
-          (a, b) => a.hidden === b.hidden && a.data.highlight === b.data.highlight,
+          (a, b) =>
+            a.hidden === b.hidden &&
+            a.data.highlight === b.data.highlight &&
+            sameHubBadges(a.data.hubBadges, b.data.hubBadges),
         ),
       ),
       edges: fresh.edges.map((edge, i) =>

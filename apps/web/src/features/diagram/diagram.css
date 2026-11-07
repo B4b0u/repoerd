@@ -115,6 +115,23 @@
   border-bottom: none;
 }
 
+/* The hub badge sits on the corner of the icon, so names stay aligned from row to row. */
+.table-node__marks {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.table-node__hub-badge {
+  position: absolute;
+  top: -5px;
+  right: -7px;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--link);
+}
+
 .column-icon {
   color: var(--text-muted);
 }
