@@ -14,7 +14,7 @@ import {
 import '@xyflow/react/dist/style.css'
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useThemeContext } from '../../shared/theme/theme-context'
-import { CanvasToolbar } from './CanvasToolbar'
+import { CanvasToolbar, type GroupToolbarActions } from './CanvasToolbar'
 import { useFlowAriaLabels } from './flow-aria'
 import { edgeTypes, nodeTypes } from './flow-types'
 import { GroupFrames, useGroupDisplay } from './groups/GroupFrames'
@@ -38,7 +38,7 @@ interface Props {
   mode: DisplayMode
   onModeChange: (mode: DisplayMode) => void
   onRearrange?: () => void
-  onRepropose?: () => void
+  groupActions?: GroupToolbarActions
   hiddenHubEdges?: ReadonlySet<string>
   hubs?: readonly string[]
   hubLinks?: Exclude<HubLinksMode, 'all'>
@@ -63,7 +63,7 @@ export function FlowCanvas({
   mode,
   onModeChange,
   onRearrange,
-  onRepropose,
+  groupActions,
   hiddenHubEdges,
   hubs,
   hubLinks,
@@ -157,7 +157,7 @@ export function FlowCanvas({
           mode={mode}
           onModeChange={onModeChange}
           onRearrange={onRearrange}
-          onRepropose={onRepropose}
+          groupActions={groupActions}
           hubs={hubs}
           hubLinks={hubLinks}
           onHubLinksChange={onHubLinksChange}

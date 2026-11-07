@@ -10,6 +10,8 @@ export const groups: GroupsCatalog = {
   repropose: "Proposer à nouveau d'après les fichiers",
   reproposeHint:
     "Afficher les groupes proposés d'après les fichiers du schéma à la place de ceux enregistrés",
+  reproposeUnavailable:
+    'Rien à proposer : toutes les tables sont dans un seul fichier et un seul schéma Postgres. Créez les groupes à la main.',
   replaced: 'Groupes remplacés par les propositions.',
   alreadySaved: "Un membre de l'équipe a déjà enregistré les groupes.",
   tag: 'Groupe : {{name}}',
@@ -36,6 +38,13 @@ export const groups: GroupsCatalog = {
     newName: 'Nom du nouveau groupe',
     create: 'Créer',
     cancel: 'Annuler',
+  },
+  createGroup: {
+    open: 'Créer un groupe',
+    select:
+      'Sélectionnez ses tables : Maj+clic sur chacune, ou Maj+glisser pour en entourer plusieurs.',
+    name: 'Dans la barre qui apparaît, choisissez « Nouveau groupe… » et donnez-lui un nom.',
+    keyboard: "Au clavier : ouvrez le détail d'une table, puis Groupe → « Nouveau groupe… ».",
   },
   selection: {
     toolbar: 'Tables sélectionnées',

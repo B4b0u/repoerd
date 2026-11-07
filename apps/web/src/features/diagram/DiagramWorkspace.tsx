@@ -13,6 +13,7 @@ import { motionDuration } from '../../shared/lib/motion'
 import { ChangesPanel } from '../compare/ChangesPanel'
 import { TableDetailPanel } from '../table-detail/TableDetailPanel'
 import { TableListPane } from '../table-list/TableListPane'
+import type { GroupToolbarActions } from './CanvasToolbar'
 import { DiagramCanvas } from './DiagramCanvas'
 import { useTableGroups } from './groups/api'
 import { GroupSelect } from './groups/GroupSelect'
@@ -117,8 +118,19 @@ function Workspace({
     () => proposeGroups(proposalSchema ?? schema).length > 0,
     [proposalSchema, schema],
   )
-  const canRepropose =
-    groupsQuery.data?.configured === true && groups.canEdit && !reproposed && hasProposals
+  // No group buttons without the right to edit, nor during the preview of the proposals.
+  const groupActions: GroupToolbarActions | undefined =
+    groups.canEdit && !reproposed
+      ? {
+          // Proposals on screen with their banner when nothing is saved: nothing to show again.
+          repropose: !hasProposals
+            ? 'unavailable'
+            : groupsQuery.data?.configured === true
+              ? () => setReproposedFor(sourceId)
+              : undefined,
+          createGroup: groups.groups.length === 0,
+        }
+      : undefined
   const changedOnly = viewState.changed === true
   // Leaving the related view remounts the full canvas: it centres the table once placed.
   const [centerAfterRemount, setCenterAfterRemount] = useState<string>()
@@ -298,7 +310,7 @@ function Workspace({
               onHubLinksChange={changeHubLinks}
               groups={groups}
               layoutMembership={savedGroups.membership}
-              onRepropose={canRepropose ? () => setReproposedFor(sourceId) : undefined}
+              groupActions={groupActions}
               onLeaveReproposal={() => setReproposedFor(undefined)}
             />
           )}

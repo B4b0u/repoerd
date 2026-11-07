@@ -19,6 +19,7 @@ import {
 } from '../../shared/ui/alert-dialog'
 import { PageMessage } from '../../shared/ui/PageMessage'
 import { type SaveOutcome, saveLayout, savePositions, trackLayoutSave, useLayout } from './api'
+import type { GroupToolbarActions } from './CanvasToolbar'
 import { FlowCanvas } from './FlowCanvas'
 import { GroupLayoutOffer, laidOutByGroup } from './groups/GroupLayoutOffer'
 import { GroupsBanner } from './groups/GroupsBanner'
@@ -64,8 +65,8 @@ interface Props {
    * previewed over them (`groups`' own by default).
    */
   layoutMembership?: ReadonlyMap<string, string | null>
-  /** Shows the groups proposed from the files again (omitted when it makes no sense). */
-  onRepropose?: () => void
+  /** The toolbar's group buttons ("Propose again", "Create a group"). */
+  groupActions?: GroupToolbarActions
   /** The proposals shown again are over: back to the saved groups. */
   onLeaveReproposal?: () => void
 }
@@ -116,7 +117,7 @@ export function DiagramCanvas({
   onHubLinksChange,
   groups,
   layoutMembership,
-  onRepropose,
+  groupActions,
   onLeaveReproposal = () => {},
 }: Props) {
   const layout = useLayout(repo, sourceId, mode, inheritLayout)
@@ -314,7 +315,7 @@ export function DiagramCanvas({
         hubs={hubs}
         hubLinks={hubLinks}
         onHubLinksChange={onHubLinksChange}
-        onRepropose={onRepropose}
+        groupActions={groupActions}
         groups={groups}
         selectable={selectable}
       >

@@ -237,14 +237,14 @@ describe('propose again', () => {
     expect(screen.queryByRole('status')).toBeNull()
   })
 
-  it('is not offered when the files propose nothing', async () => {
+  it('is unavailable when the files propose nothing', async () => {
     const bare: DbSchema = {
       ...schema,
       tables: { user: { ...table('user', 'x'), file: undefined } },
     }
     mount(saved, true, { schema: bare })
-    await screen.findByRole('button', { name: 'Zoom in' })
-    expect(screen.queryByRole('button', { name: REPROPOSE })).toBeNull()
+    const button = await screen.findByRole('button', { name: REPROPOSE })
+    expect(button.getAttribute('aria-disabled')).toBe('true')
   })
 
   it('stays in the preview when the replacement is refused', async () => {

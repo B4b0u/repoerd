@@ -13,6 +13,8 @@ export const groups = {
   cancelProposal: 'Cancel',
   repropose: 'Propose again from the files',
   reproposeHint: 'Show the groups proposed from the schema files instead of the saved ones',
+  reproposeUnavailable:
+    'Nothing to propose: all the tables are in one file and one Postgres schema. Create the groups by hand.',
   replaced: 'Groups replaced by the proposals.',
   /** Saving or ignoring proposals of a source someone configured meanwhile (another tab). */
   alreadySaved: 'A teammate already saved the groups.',
@@ -43,6 +45,13 @@ export const groups = {
     newName: 'Name of the new group',
     create: 'Create',
     cancel: 'Cancel',
+  },
+  /** The toolbar's help while a source has no group (push right). */
+  createGroup: {
+    open: 'Create a group',
+    select: 'Select its tables: Shift+click each one, or Shift+drag around several.',
+    name: 'In the bar that appears, choose "New group…" and name it.',
+    keyboard: 'With the keyboard: open the details of a table, then Group → "New group…".',
   },
   /** The bar of the tables selected on the canvas (Shift+click, Shift+drag). */
   selection: {
