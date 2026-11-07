@@ -63,7 +63,7 @@ export function DiagramPage({ owner, repo: name }: Props) {
   const refreshing =
     useIsFetching({
       predicate: ({ queryKey }) =>
-        ['branches', 'schema', 'compare', 'layout'].includes(String(queryKey[0])) &&
+        ['branches', 'schema', 'compare', 'layout', 'groups'].includes(String(queryKey[0])) &&
         queryKey[1] === owner &&
         queryKey[2] === name,
     }) > 0

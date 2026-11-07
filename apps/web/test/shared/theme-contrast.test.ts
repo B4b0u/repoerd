@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
+import { CANVAS } from '../../src/features/diagram/groups/group-colors'
 
 // Read from disk: Vitest's CSS handling returns an empty string for `?raw` stylesheets.
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8')
@@ -66,5 +67,9 @@ describe('theme contrast (WCAG)', () => {
         expect(ratio(colour, mix(colour, header, 0.12))).toBeGreaterThanOrEqual(4.5)
       }
     }
+  })
+
+  it('measures the group colours against the canvas of each theme', () => {
+    expect(CANVAS).toEqual({ dark: token(dark, '--canvas'), light: token(light, '--canvas') })
   })
 })

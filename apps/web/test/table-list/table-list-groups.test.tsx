@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { GroupView } from '../../src/features/diagram/groups/group-view'
 import { TableListPane } from '../../src/features/table-list/TableListPane'
-import { i18n } from '../../src/shared/i18n/i18n'
+import '../../src/shared/i18n/i18n'
 
 afterEach(() => cleanup())
 
@@ -90,9 +90,12 @@ describe('TableListPane by group', () => {
   it('collapses a section locally', async () => {
     const user = userEvent.setup()
     renderPane()
-    await user.click(screen.getByRole('button', { name: 'Collapse the group Support' }))
+    const collapse = screen.getByRole('button', { name: 'Collapse the group Support' })
+    expect(collapse.getAttribute('aria-expanded')).toBe('true')
+    await user.click(collapse)
     expect(screen.queryByRole('button', { name: 'tickets' })).toBeNull()
-    expect(screen.getByRole('button', { name: 'Expand the group Support' })).toBeTruthy()
+    const expand = screen.getByRole('button', { name: 'Expand the group Support' })
+    expect(expand.getAttribute('aria-expanded')).toBe('false')
   })
 
   it('hides the sections without a match while searching', async () => {
@@ -120,5 +123,3 @@ describe('TableListPane by group', () => {
     expect(screen.queryAllByRole('heading', { level: 3 })).toEqual([])
   })
 })
-
-void i18n

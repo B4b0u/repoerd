@@ -257,6 +257,7 @@ function GroupSection({
     <li>
       <section aria-label={name}>
         <div className="flex items-center gap-1.5 px-1.5 pt-2 pb-0.5">
+          {/* The whole group, even the rows a search filters out: the heading counts them all. */}
           <Checkbox
             checked={state}
             aria-label={t('showGroup', { name })}
@@ -277,6 +278,7 @@ function GroupSection({
           </h3>
           <IconButton
             label={t(collapsed ? 'expandGroup' : 'collapseGroup', { name })}
+            aria-expanded={!collapsed}
             onClick={onCollapse}
           >
             {collapsed ? <ChevronRight /> : <ChevronDown />}
