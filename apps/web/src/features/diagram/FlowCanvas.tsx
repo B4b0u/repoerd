@@ -20,6 +20,7 @@ import { edgeTypes, nodeTypes } from './flow-types'
 import { useGroupDisplay } from './groups/GroupFrames'
 import type { GroupView } from './groups/group-view'
 import { PlaceSelectionBar, SelectionStatus } from './groups/PlaceSelectionBar'
+import type { OnTablesMoved } from './groups/use-group-move'
 import type { HubLinksMode } from './hubs'
 import { minimapColor } from './model/diff-view'
 import { createHighlighter } from './model/highlight'
@@ -33,6 +34,8 @@ interface Props {
   edges: RelationshipFlowEdge[]
   onNodesChange: OnNodesChange<TableFlowNode>
   onNodeDragStop?: OnNodeDrag<TableFlowNode>
+  /** Tables moved together by their group's label (saved like a drag). */
+  onTablesMoved?: OnTablesMoved
   active?: string
   hidden: ReadonlySet<string>
   onActivate: (table: string | undefined) => void
@@ -58,6 +61,7 @@ export function FlowCanvas({
   edges,
   onNodesChange,
   onNodeDragStop,
+  onTablesMoved,
   active,
   hidden,
   onActivate,
@@ -151,6 +155,7 @@ export function FlowCanvas({
           hidden={hidden}
           frames={groupDisplay.frames}
           proposed={groups?.proposed ?? false}
+          onTablesMoved={onTablesMoved}
         />
         <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
         <MiniMap<TableFlowNode>

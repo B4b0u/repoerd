@@ -259,6 +259,16 @@ button.group-frame__label {
   cursor: pointer;
 }
 
+/* Dragging a label moves its group's tables (a click still opens the editor). */
+.group-frame__label--movable {
+  cursor: grab;
+  touch-action: none;
+}
+
+.group-frame__label--movable:active {
+  cursor: grabbing;
+}
+
 /* A steady ring on screen, whatever the zoom. */
 button.group-frame__label:focus-visible {
   outline: calc(2px / var(--canvas-zoom, 1)) solid var(--ring);

@@ -1,6 +1,7 @@
 import { useStore, ViewportPortal } from '@xyflow/react'
 import { type CSSProperties, useMemo } from 'react'
 import { type DrawnFrame, GroupFrames } from './groups/GroupFrames'
+import type { OnTablesMoved } from './groups/use-group-move'
 import type { RelationshipFlowEdge, TableFlowNode } from './model/to-flow'
 import {
   type MeasureText,
@@ -82,17 +83,24 @@ export function FramesAndOverviewLabels({
   hidden,
   frames,
   proposed,
+  onTablesMoved,
 }: {
   nodes: readonly TableFlowNode[]
   edges: readonly RelationshipFlowEdge[]
   hidden: ReadonlySet<string>
   frames: DrawnFrame[]
   proposed: boolean
+  onTablesMoved?: OnTablesMoved
 }) {
   const labels = useOverviewLabels(nodes, edges, hidden, frames)
   return (
     <>
-      <GroupFrames frames={frames} proposed={proposed} crowded={labels.crowdedGroups} />
+      <GroupFrames
+        frames={frames}
+        proposed={proposed}
+        crowded={labels.crowdedGroups}
+        onTablesMoved={onTablesMoved}
+      />
       <OverviewTableLabels labels={labels} nodes={nodes} />
     </>
   )

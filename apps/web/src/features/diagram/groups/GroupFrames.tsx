@@ -8,10 +8,11 @@ import { type GroupColors, groupColors } from './group-colors'
 import { useGroupEditing } from './group-editing'
 import { type Box, classifyMembers, type GroupFrame, groupFrames } from './group-frames'
 import type { GroupView } from './group-view'
+import { type OnTablesMoved, useGroupMove } from './use-group-move'
 
 type ThemedColors = NodeGroup['colors']
 
-export interface DrawnFrame extends Omit<GroupFrame, 'members'> {
+export interface DrawnFrame extends GroupFrame {
   name: string
   colors: ThemedColors
 }
@@ -91,8 +92,7 @@ export function useGroupDisplay(
         ? groupFrames(boxes, classification.clusters).flatMap((frame) => {
             const group = groups.get(frame.groupId)
             if (!group) return []
-            const { members: _members, ...geometry } = frame
-            return [{ ...geometry, ...group }]
+            return [{ ...frame, ...group }]
           })
         : [],
     [classification, boxes, groups],
@@ -112,16 +112,20 @@ export function GroupFrames({
   frames,
   proposed,
   crowded,
+  onTablesMoved,
 }: {
   frames: DrawnFrame[]
   proposed: boolean
   /** Names left out of the overview at this zoom: they would overlap a larger group's. */
   crowded?: ReadonlySet<string>
+  /** Dragging a label moves the tables of its frame; omitted where the layout is not saved. */
+  onTablesMoved?: OnTablesMoved
 }) {
   const { theme } = useThemeContext()
   const editing = useGroupEditing()
   const flow = useReactFlow()
   const store = useStoreApi()
+  const move = useGroupMove(onTablesMoved)
   if (frames.length === 0) return null
 
   // A label reached with Tab outside the visible canvas: bring it into view, at the same zoom.
@@ -169,9 +173,14 @@ export function GroupFrames({
       {frames.map((frame) => {
         const colors: GroupColors = frame.colors[theme]
         const label = {
-          className: crowded?.has(frame.groupId)
-            ? 'group-frame__label group-frame__label--crowded'
-            : 'group-frame__label',
+          className: [
+            'group-frame__label',
+            crowded?.has(frame.groupId) ? 'group-frame__label--crowded' : '',
+            onTablesMoved ? 'group-frame__label--movable nopan' : '',
+          ]
+            .filter(Boolean)
+            .join(' '),
+          ...move(frame.members),
           'data-label-of': frame.groupId,
           title: frame.name,
           style: {

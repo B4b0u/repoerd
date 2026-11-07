@@ -155,3 +155,61 @@ test('offers once to lay out a diagram arranged before its groups were saved', a
   await expect(canvas.locator('.group-frame__label').first()).toBeVisible()
   await expect(offer).toHaveCount(0)
 })
+
+test('dragging a group label moves its tables, saved; a click still opens the editor', async ({
+  page,
+}) => {
+  const { canvas, layoutUrl } = await openWithSavedGroups(page)
+  const label = canvas.locator('.group-frame__label', { hasText: 'catalog' })
+  await expect(label).toBeVisible()
+  const groupId = await label.getAttribute('data-label-of')
+  const frame = canvas.locator(`.group-frame[data-group-id="${groupId}"]`)
+  const members = await canvas.locator('.react-flow__node').evaluateAll(
+    (nodes, frameBox) => {
+      const f = frameBox as DOMRect
+      return nodes
+        .filter((node) => {
+          const b = node.getBoundingClientRect()
+          return b.left >= f.left && b.right <= f.right && b.top >= f.top && b.bottom <= f.bottom
+        })
+        .map((node) => node.getAttribute('data-id') as string)
+    },
+    await frame.evaluate((element) => element.getBoundingClientRect().toJSON()),
+  )
+  expect(members.length).toBeGreaterThan(0)
+  const before = (await (await page.request.get(layoutUrl)).json()) as Layout
+  const startOf = (layout: Layout, table: string) =>
+    layout.positions.find((position) => position.table === table)
+
+  const box = await label.boundingBox()
+  if (!box) throw new Error('no label')
+  const zoom = await canvas
+    .locator('.react-flow__viewport')
+    .evaluate((viewport) => new DOMMatrix(getComputedStyle(viewport).transform).a)
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(box.x + box.width / 2 + 120, box.y + box.height / 2 + 60, { steps: 8 })
+  await page.mouse.up()
+
+  // Moved, not opened: the tables of the frame, and only them, are saved at their new place.
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await expect
+    .poll(async () => {
+      const after = (await (await page.request.get(layoutUrl)).json()) as Layout
+      const moved = after.positions.filter((b) => {
+        const a = startOf(before, b.table)
+        return a !== undefined && (a.x !== b.x || a.y !== b.y)
+      })
+      const shifted = moved.every((b) => {
+        const a = startOf(before, b.table) as Layout['positions'][number]
+        return Math.abs(b.x - a.x - 120 / zoom) <= 2 && Math.abs(b.y - a.y - 60 / zoom) <= 2
+      })
+      return { moved: moved.map((b) => b.table).sort(), shifted }
+    })
+    .toEqual({ moved: [...members].sort(), shifted: true })
+
+  // A plain click on the label still opens the group's editor.
+  await label.click()
+  await expect(page.getByRole('dialog', { name: /Edit the group catalog/ })).toBeVisible()
+  await page.keyboard.press('Escape')
+})

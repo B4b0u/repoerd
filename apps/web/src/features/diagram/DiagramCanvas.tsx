@@ -255,6 +255,12 @@ export function DiagramCanvas({
     },
     [batcher],
   )
+  const onTablesMoved = useCallback(
+    (moved: TablePosition[]) => {
+      for (const position of moved) batcher.add(position)
+    },
+    [batcher],
+  )
 
   const rearrangeAll = async () => {
     batcher.cancel() // pending drags must not overwrite the new layout
@@ -305,6 +311,7 @@ export function DiagramCanvas({
         edges={edges}
         onNodesChange={onNodesChange}
         onNodeDragStop={onNodeDragStop}
+        onTablesMoved={onTablesMoved}
         active={active}
         hidden={hidden}
         onActivate={onActivate}
