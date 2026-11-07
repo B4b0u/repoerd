@@ -44,9 +44,14 @@ export function GroupSelect({ table }: { table: string }) {
   const [creating, setCreating] = useState(false)
   const [draft, setDraft] = useState('')
   const input = useRef<HTMLInputElement>(null)
-  // The selector gives the focus back to its trigger when it closes: the new name's field takes it.
+  const trigger = useRef<HTMLButtonElement>(null)
+  const wasCreating = useRef(false)
   useEffect(() => {
+    // The selector gives the focus back to its trigger when it closes: the new name's field takes it.
     if (creating) input.current?.focus()
+    // The form is gone (created, cancelled) with the focus it held: back to the selector.
+    else if (wasCreating.current) trigger.current?.focus()
+    wasCreating.current = creating
   }, [creating])
   if (!editing || editing.saved === undefined) return null
 
@@ -112,7 +117,7 @@ export function GroupSelect({ table }: { table: string }) {
           {label}
         </Label>
         <Select value={current ? `${GROUP}${current.id}` : NONE} onValueChange={choose}>
-          <SelectTrigger id={`${ids}-group`} size="sm" className="min-w-0 flex-1">
+          <SelectTrigger ref={trigger} id={`${ids}-group`} size="sm" className="min-w-0 flex-1">
             <SelectValue />
           </SelectTrigger>
           <SelectContent

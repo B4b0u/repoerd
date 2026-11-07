@@ -491,6 +491,38 @@ describe('TableDetailPanel group', () => {
     // One gesture: one notice, one undo.
     expect(await screen.findAllByText('1 table placed in "Archive".')).toHaveLength(1)
     expect(screen.queryByRole('textbox', { name: 'Name of the new group' })).toBeNull()
+    // The form held the focus: it goes back to the selector.
+    expect(document.activeElement).toBe(screen.getByRole('combobox', { name: 'Group' }))
+
+    // Undo deletes the new group and gives the table back to its file.
+    await user.click(screen.getByRole('button', { name: 'Undo' }))
+    await waitFor(() => expect(server.sent).toHaveLength(4))
+    expect(server.sent.slice(2)).toEqual([
+      { method: 'PATCH', path: PATCH, body: { assignments: {}, clear: ['posts'] } },
+      { method: 'DELETE', path: `/api/repos/acme/shop/groups/${id}?source=db`, body: undefined },
+    ])
+    expect(server.state.groups.map((g) => g.id)).toEqual(['content', 'misc'])
+    expect(server.state.assignments).toEqual({})
+  })
+
+  it('gives the focus back to the selector when the new group is cancelled', async () => {
+    const server = renderGrouped()
+    const user = await choose('New group…')
+    const select = screen.getByRole('combobox', { name: 'Group' })
+    await user.type(screen.getByRole('textbox', { name: 'Name of the new group' }), 'x{Escape}')
+    expect(screen.queryByRole('textbox', { name: 'Name of the new group' })).toBeNull()
+    await waitFor(() => expect(document.activeElement).toBe(select))
+
+    await choose('New group…')
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        screen.getByRole('textbox', { name: 'Name of the new group' }),
+      ),
+    )
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('textbox', { name: 'Name of the new group' })).toBeNull()
+    await waitFor(() => expect(document.activeElement).toBe(select))
+    expect(server.sent).toEqual([])
   })
 
   it('shows the group as text, without any control, without the push right', () => {

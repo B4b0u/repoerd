@@ -138,9 +138,7 @@ describe('the group label editor', () => {
       true,
     )
     await user.type(name, '{Enter}')
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 20))
-    })
+    await act(async () => {})
     expect(server.sent).toEqual([])
   })
 
@@ -190,6 +188,54 @@ describe('the group label editor', () => {
       path: '/api/repos/acme/shop/groups/billing?source=db',
       body: { name: 'billing' },
     })
+  })
+
+  it('gives the focus to the next label once a group is deleted, else to the previous one', async () => {
+    renderWorkspace()
+    let { user, dialog } = await openEditor('billing')
+    await user.click(dialog.getByRole('button', { name: 'Delete the group' }))
+    const accounts = await labelButton('Accounts')
+    await waitFor(() => expect(document.activeElement).toBe(accounts))
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'Edit the group billing' })).toBeNull(),
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Undo' }))
+    await labelButton('billing')
+    ;({ user, dialog } = await openEditor('Accounts'))
+    await user.click(dialog.getByRole('button', { name: 'Delete the group' }))
+    const billingLabel = await labelButton('billing')
+    await waitFor(() => expect(document.activeElement).toBe(billingLabel))
+  })
+
+  it('offers no editing while the proposals are shown again', async () => {
+    const server = fakeGroupsServer(configured)
+    renderWithApp(
+      <DiagramWorkspace
+        repo={repo}
+        schema={schema}
+        sourceId="db"
+        viewState={{ hidden: [], mode: 'ALL_FIELDS', active: 'users' }}
+        updateView={vi.fn()}
+      />,
+      server.client,
+    )
+    await labelButton('billing')
+    const panel = within(await screen.findByRole('complementary', { name: 'Details of users' }))
+    await panel.findByRole('combobox', { name: 'Group' })
+    await userEvent
+      .setup()
+      .click(screen.getByRole('button', { name: 'Propose again from the files' }))
+    await waitFor(() => expect(document.querySelector('.group-frame--proposed')).toBeTruthy())
+    expect(screen.queryByRole('button', { name: /^Edit the group/ })).toBeNull()
+    for (const label of document.querySelectorAll('.group-frame__label')) {
+      expect(label.tagName).toBe('SPAN')
+    }
+    expect(panel.queryByRole('combobox')).toBeNull()
+    expect(panel.getByText('users', { selector: 'p span' }).closest('p')?.textContent).toContain(
+      'Group',
+    )
+    expect(server.sent).toEqual([])
   })
 
   it('is reached with Tab and opened with Enter', async () => {

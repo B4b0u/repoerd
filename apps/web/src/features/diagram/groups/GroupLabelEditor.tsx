@@ -1,6 +1,6 @@
 import { GROUP_PALETTE, TABLE_GROUP_LIMITS, type TableGroup } from '@repoerd/model'
 import { Check, Trash2 } from 'lucide-react'
-import { type ComponentProps, type FormEvent, useId, useState } from 'react'
+import { type ComponentProps, type FormEvent, useId, useRef, useState } from 'react'
 import { Button } from '../../../shared/ui/button'
 import { Input } from '../../../shared/ui/input'
 import { Label } from '../../../shared/ui/label'
@@ -12,6 +12,17 @@ import { useGroupsTranslation } from './groups-i18n'
 /** Black or white, whichever reads better on the swatch. */
 const checkColor = (swatch: string) =>
   contrastRatio(swatch, '#000000') >= contrastRatio(swatch, '#ffffff') ? '#000000' : '#ffffff'
+
+/** The frame label after `label` (a sibling button), else the one before it. */
+function neighbourLabel(label: HTMLButtonElement | null): HTMLButtonElement | undefined {
+  if (!label?.parentElement) return undefined
+  const labels = [
+    ...label.parentElement.querySelectorAll<HTMLButtonElement>('button.group-frame__label'),
+  ]
+  const index = labels.indexOf(label)
+  if (index < 0) return undefined
+  return labels[index + 1] ?? labels[index - 1]
+}
 
 interface Props extends Omit<ComponentProps<'button'>, 'type'> {
   group: TableGroup
@@ -31,6 +42,9 @@ export function GroupLabelEditor({ group, editing, className, children, ...butto
   const [draft, setDraft] = useState(group.name)
   const name = draft.trim()
   const color = group.color.toLowerCase()
+  const trigger = useRef<HTMLButtonElement>(null)
+  // The group is being deleted: its label goes away, the focus must not go with it.
+  const deleting = useRef(false)
 
   const onOpenChange = (next: boolean) => {
     if (next) setDraft(group.name)
@@ -55,6 +69,7 @@ export function GroupLabelEditor({ group, editing, className, children, ...butto
   }
 
   const remove = () => {
+    deleting.current = true
     setOpen(false)
     void editing.edits.run(
       (current) =>
@@ -69,6 +84,7 @@ export function GroupLabelEditor({ group, editing, className, children, ...butto
     <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger asChild>
         <button
+          ref={trigger}
           type="button"
           {...button}
           className={`${className ?? ''} nopan`}
@@ -81,6 +97,14 @@ export function GroupLabelEditor({ group, editing, className, children, ...butto
         align="start"
         aria-label={t('editor.open', { name: group.name })}
         className="flex w-64 flex-col gap-3"
+        onCloseAutoFocus={(event) => {
+          if (!deleting.current) return
+          deleting.current = false
+          const next = neighbourLabel(trigger.current)
+          if (!next) return
+          event.preventDefault()
+          next.focus()
+        }}
       >
         <form onSubmit={rename} className="flex flex-col gap-1.5">
           <Label htmlFor={`${ids}-name`}>{t('editor.name')}</Label>
