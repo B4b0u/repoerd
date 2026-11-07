@@ -15,7 +15,6 @@ import { TableDetailPanel } from '../table-detail/TableDetailPanel'
 import { TableListPane } from '../table-list/TableListPane'
 import { DiagramCanvas } from './DiagramCanvas'
 import { useTableGroups } from './groups/api'
-import { forgetVisit } from './groups/GroupLayoutOffer'
 import { GroupSelect } from './groups/GroupSelect'
 import { GroupEditingProvider } from './groups/group-editing'
 import { buildGroupView } from './groups/group-view'
@@ -100,10 +99,6 @@ function Workspace({
       }),
     [schema, groupsQuery.data, proposalSchema, groupsQuery.isPending, reproposed],
   )
-  // Leaving this source's diagram ends its visit, for the offer to lay it out by group. The
-  // workspace stays mounted while the canvas mounts again (mode, related view).
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the repository's identity is its name
-  useEffect(() => () => forgetVisit(repo, sourceId), [repo.owner, repo.name, sourceId])
   // Back to the saved groups when the source changes (also on a later return to this source).
   // biome-ignore lint/correctness/useExhaustiveDependencies: runs on the source change only
   useEffect(() => setReproposedFor(undefined), [sourceId])

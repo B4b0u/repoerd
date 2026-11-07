@@ -1,39 +1,7 @@
-import type { DisplayMode, RepoRef } from '@repoerd/model'
+import type { RepoRef } from '@repoerd/model'
 import { useEffect, useRef } from 'react'
 import { toast } from 'sonner'
 import { useGroupsTranslation } from './groups-i18n'
-
-/**
- * Per repository, source and display mode: whether a layout was saved when the diagram of this
- * source first placed its tables. A canvas mounted again while the diagram stays open (another
- * mode, back from the related view) finds the positions it saved itself: they must not count as
- * a layout the user already had. Forgotten when the diagram is left (`forgetVisit`).
- */
-const layoutAtFirstPlacement = new Map<string, boolean>()
-
-const visitKey = (repo: RepoRef, sourceId: string) => `${repo.owner}/${repo.name}:${sourceId}:`
-
-/** Whether the user had a saved layout before this visit placed any table of it. */
-export function hadLayoutBeforeVisit(
-  repo: RepoRef,
-  sourceId: string,
-  mode: DisplayMode,
-  hasSavedPositions: boolean,
-): boolean {
-  const key = visitKey(repo, sourceId) + mode
-  const known = layoutAtFirstPlacement.get(key)
-  if (known !== undefined) return known
-  layoutAtFirstPlacement.set(key, hasSavedPositions)
-  return hasSavedPositions
-}
-
-/** The diagram of this source is left: a later visit reads its saved layouts afresh. */
-export function forgetVisit(repo: RepoRef, sourceId: string) {
-  const prefix = visitKey(repo, sourceId)
-  for (const key of [...layoutAtFirstPlacement.keys()]) {
-    if (key.startsWith(prefix)) layoutAtFirstPlacement.delete(key)
-  }
-}
 
 const storageKey = (repo: RepoRef, sourceId: string) =>
   `repoerd:group-layout-offer:${repo.owner}/${repo.name}:${sourceId}`
@@ -55,6 +23,15 @@ function markShown(key: string) {
   }
 }
 
+/**
+ * A visit placed every table of this source itself, group by group: its diagram needs no offer,
+ * on this visit nor on any later one (a reload, another branch or a comparison finds the
+ * positions this visit saved, which are no layout made before the groups).
+ */
+export function laidOutByGroup(repo: RepoRef, sourceId: string) {
+  markShown(storageKey(repo, sourceId))
+}
+
 // A new id for every notice: a notice dismissed as the canvas unmounts must not take the next
 // one (StrictMode mounts twice) with it.
 let offers = 0
@@ -62,7 +39,7 @@ let offers = 0
 interface Props {
   repo: RepoRef
   sourceId: string
-  /** Saved groups meet a layout the user had before this visit. */
+  /** Saved groups meet a layout the visit found saved (not one a visit laid out by group). */
   eligible: boolean
   /** Opens the confirmation of "Rearrange all tables", which lays the tables out by group. */
   onLayOut: () => void
@@ -90,7 +67,8 @@ export function GroupLayoutOffer({ repo, sourceId, eligible, onLayOut }: Props) 
       id,
       duration: Number.POSITIVE_INFINITY,
       // On the canvas side: the other notices' corner (top right) is over the detail panel, whose
-      // controls this one would hide until used or dismissed.
+      // controls this one would hide until used or dismissed. The toaster's left offset keeps it
+      // past the table list (shared/ui/sonner.tsx).
       position: 'bottom-left',
       // The text on its own line, the two buttons under it: the action's label is long.
       classNames: { toast: 'flex-wrap', content: 'basis-full!' },

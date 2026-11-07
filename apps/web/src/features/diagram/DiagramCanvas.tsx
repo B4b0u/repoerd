@@ -20,7 +20,7 @@ import {
 import { PageMessage } from '../../shared/ui/PageMessage'
 import { type SaveOutcome, saveLayout, savePositions, trackLayoutSave, useLayout } from './api'
 import { FlowCanvas } from './FlowCanvas'
-import { GroupLayoutOffer, hadLayoutBeforeVisit } from './groups/GroupLayoutOffer'
+import { GroupLayoutOffer, laidOutByGroup } from './groups/GroupLayoutOffer'
 import { GroupsBanner } from './groups/GroupsBanner'
 import { useGroupEditing } from './groups/group-editing'
 import type { GroupView } from './groups/group-view'
@@ -124,7 +124,7 @@ export function DiagramCanvas({
   const { fitView } = useReactFlow()
   const apiMessage = useApiErrorMessage()
   const [placeError, setPlaceError] = useState<unknown>()
-  // The user had arranged this diagram before this visit (not laid out by it).
+  // Positions were saved for this diagram before this canvas placed its tables.
   const [hadLayout, setHadLayout] = useState(false)
   // Several tables can be selected and placed into a group together (editing commands only).
   const selectable = useGroupEditing()?.editable === true
@@ -218,7 +218,11 @@ export function DiagramCanvas({
       ({ positions, added }) => {
         if (cancelled) return
         placed.current = true
-        setHadLayout(hadLayoutBeforeVisit(repo, sourceId, mode, hasSavedPositions))
+        setHadLayout(hasSavedPositions)
+        // Every table placed group by group: no layout of the user's to offer to rearrange.
+        if (!hasSavedPositions && [...(membership?.values() ?? [])].some((id) => id !== null)) {
+          laidOutByGroup(repo, sourceId)
+        }
         show(positions)
         // Auto-placed tables are saved right away so they never move by themselves later.
         void batcher.addAll(savablePositions(added, diff))

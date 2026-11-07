@@ -70,7 +70,7 @@ const SAVED = [
   { table: 'users', x: 400, y: 0 },
 ]
 
-// The offer is remembered per page visit and repository: every test opens a repository of its own.
+// The offer is remembered per repository and source: every test opens a repository of its own.
 let repoCount = 0
 const nextRepo = () => ({ owner: 'acme', name: `shop${++repoCount}` })
 const offerKey = (repo: { owner: string; name: string }) =>
@@ -84,6 +84,7 @@ function renderWorkspace(
 ) {
   const server = fakeGroupsServer(groups, { positions, canEdit })
   let setViewState: (next: ViewState) => void = () => {}
+  let setKey: (update: (key: number) => number) => void = () => {}
   function Workspace() {
     const [viewState, setCurrent] = useState<ViewState>({ hidden: [], mode: 'ALL_FIELDS' })
     setViewState = setCurrent
@@ -97,8 +98,18 @@ function renderWorkspace(
       />
     )
   }
-  renderWithApp(<Workspace />, server.client, { reactStrictMode: strict })
-  return { server, view: (next: ViewState) => act(() => setViewState(next)) }
+  // The diagram page keys the workspace on the commit, the source and its reload count.
+  function Page() {
+    const [key, setCurrent] = useState(0)
+    setKey = setCurrent
+    return <Workspace key={key} />
+  }
+  renderWithApp(<Page />, server.client, { reactStrictMode: strict })
+  return {
+    server,
+    view: (next: ViewState) => act(() => setViewState(next)),
+    remount: () => act(() => setKey((key) => key + 1)),
+  }
 }
 
 /** The canvas is placed and the groups are loaded (their frames are labelled). */
@@ -124,8 +135,11 @@ afterEach(() => {
 
 describe('the offer to lay out the diagram by group', () => {
   it('is made when saved groups meet a layout saved before this visit', async () => {
-    renderWorkspace(nextRepo())
+    const repo = nextRepo()
+    renderWorkspace(repo)
     expect(await screen.findByRole('button', { name: OFFER })).toBeTruthy()
+    // Not remembered until answered: the user whose layout predates the groups gets it.
+    expect(window.localStorage.getItem(offerKey(repo))).toBeNull()
   })
 
   it('is made once under StrictMode, which mounts the canvas twice', async () => {
@@ -218,15 +232,44 @@ describe('the offer to lay out the diagram by group', () => {
     expect(screen.queryByRole('button', { name: OFFER })).toBeNull()
   })
 
-  it('reads the saved layout afresh once the diagram was left and opened again', async () => {
+  it('is not made on a later visit to a diagram a first visit laid out by group', async () => {
     const repo = nextRepo()
     renderWorkspace(repo, { positions: [] })
     await settled()
     expect(screen.queryByRole('button', { name: OFFER })).toBeNull()
+    // Laid out by group: there is nothing to offer for this diagram any more.
+    expect(window.localStorage.getItem(offerKey(repo))).not.toBeNull()
 
-    // Another page, then back: the positions saved by the first visit are a layout of the user's.
+    // A reload: the positions that visit saved are read back.
     cleanup()
     renderWorkspace(repo)
+    await settled()
+    expect(screen.queryByRole('button', { name: OFFER })).toBeNull()
+  })
+
+  it('is not made when the workspace mounts again after a first visit (branch, refresh)', async () => {
+    const positions: typeof SAVED = []
+    const { remount } = renderWorkspace(nextRepo(), { positions })
+    await settled()
+    positions.push(...SAVED)
+    await remount()
+    await waitFor(() => expect(vi.mocked(layout.placeTables)).toHaveBeenCalledTimes(2))
+    await settled()
+    expect(screen.queryByRole('button', { name: OFFER })).toBeNull()
+  })
+
+  it('is made once a first visit without groups is followed by saved groups', async () => {
+    const repo = nextRepo()
+    const positions: typeof SAVED = []
+    renderWorkspace(repo, { positions, groups: { configured: true, groups: [], assignments: {} } })
+    await waitFor(() => expect(document.querySelector('.react-flow__node')).toBeTruthy())
+    await act(() => new Promise((resolve) => setTimeout(resolve, 50)))
+    // Nothing was laid out by group.
+    expect(window.localStorage.getItem(offerKey(repo))).toBeNull()
+
+    cleanup()
+    positions.push(...SAVED)
+    renderWorkspace(repo, { positions })
     expect(await screen.findByRole('button', { name: OFFER })).toBeTruthy()
   })
 
@@ -236,6 +279,10 @@ describe('the offer to lay out the diagram by group', () => {
     const toaster = offer.closest('[data-sonner-toaster]')
     expect(toaster?.getAttribute('data-y-position')).toBe('bottom')
     expect(toaster?.getAttribute('data-x-position')).toBe('left')
+    // Past the table list (w-65), whose bottom rows it would hide otherwise.
+    expect((toaster as HTMLElement).style.getPropertyValue('--offset-left')).toBe(
+      'calc(16.25rem + 16px)',
+    )
   })
 
   it('is not made for groups that are only proposed', async () => {
