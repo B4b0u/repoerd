@@ -20,6 +20,7 @@ import { Input } from '../../shared/ui/input'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../shared/ui/tabs'
 import { groupColors } from '../diagram/groups/group-colors'
 import type { GroupView } from '../diagram/groups/group-view'
+import { useGroupsTranslation } from '../diagram/groups/groups-i18n'
 import { filterTables } from './filter-tables'
 
 interface Props {
@@ -51,6 +52,7 @@ export function TableListPane({
   changes,
 }: Props) {
   const { t } = useTranslation('tables')
+  const { t: tGroups } = useGroupsTranslation()
   const [query, setQuery] = useState('')
   const [collapsed, setCollapsed] = useState(false)
   const [collapsedGroups, setCollapsedGroups] = useState<ReadonlySet<string>>(new Set())
@@ -163,7 +165,7 @@ export function TableListPane({
               return (
                 <GroupSection
                   key={key || 'ungrouped'}
-                  name={section.id === null ? t('ungrouped') : section.name}
+                  name={section.id === null ? tGroups('ungrouped') : section.name}
                   color={section.color === null ? null : groupColors(section.color, theme).stroke}
                   tables={section.tables}
                   hidden={hidden}
@@ -250,7 +252,7 @@ function GroupSection({
   onSetHidden,
   children,
 }: SectionProps) {
-  const { t } = useTranslation('tables')
+  const { t } = useGroupsTranslation()
   const hiddenCount = tables.filter((table) => hidden.has(table)).length
   const state = hiddenCount === 0 ? true : hiddenCount === tables.length ? false : 'indeterminate'
   return (

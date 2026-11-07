@@ -108,6 +108,22 @@ export function inverseOf(edits: readonly GroupEdit[], before: TableGroupsRespon
   })
 }
 
+/**
+ * The "Undo" of a gesture, computed when it runs on `current` (other gestures may have come in
+ * between): a group that no longer exists is not brought back, unless the gesture deleted it.
+ */
+export function undoEdits(
+  gesture: readonly GroupEdit[],
+  before: TableGroupsResponse,
+  current: TableGroupsResponse,
+): GroupEdit[] {
+  const deleted = new Set(gesture.flatMap((e) => (e.kind === 'deleteGroup' ? [e.groupId] : [])))
+  const exists = new Set(current.groups.map((g) => g.id))
+  return inverseOf(gesture, before).filter(
+    (edit) => edit.kind !== 'saveGroup' || exists.has(edit.group.id) || deleted.has(edit.group.id),
+  )
+}
+
 /** The state once the server applied the edits: the optimistic value of the cache. */
 export function applyEdits(
   state: TableGroupsResponse,

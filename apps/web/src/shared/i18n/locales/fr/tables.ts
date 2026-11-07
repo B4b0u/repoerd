@@ -10,8 +10,4 @@ export const tables: Catalog['tables'] = {
   show: 'Afficher {{table}}',
   visibleCount: 'Tables affichées : {{visible}} sur {{total}}',
   noMatch: 'Aucune table ne correspond.',
-  ungrouped: 'Hors groupe',
-  showGroup: 'Afficher le groupe {{name}}',
-  collapseGroup: 'Replier le groupe {{name}}',
-  expandGroup: 'Déplier le groupe {{name}}',
 }

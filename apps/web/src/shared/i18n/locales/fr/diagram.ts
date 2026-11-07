@@ -107,17 +107,4 @@ export const diagram: Catalog['diagram'] = {
     none: 'Aucune table liée',
     open: 'Ouvrir dans la vue principale',
   },
-  groups: {
-    proposed_one: "{{count}} groupe proposé d'après les fichiers du schéma",
-    proposed_other: "{{count}} groupes proposés d'après les fichiers du schéma",
-    tag: 'Groupe : {{name}}',
-    undo: 'Annuler',
-    deleted: 'Groupe « {{name}} » supprimé.',
-    placed_one: '{{count}} table rangée dans « {{name}} ».',
-    placed_other: '{{count}} tables rangées dans « {{name}} ».',
-    ungrouped_one: '{{count}} table sortie de son groupe.',
-    ungrouped_other: '{{count}} tables sorties de leur groupe.',
-    followFile_one: '{{count}} table suit de nouveau son fichier.',
-    followFile_other: '{{count}} tables suivent de nouveau leur fichier.',
-  },
 }

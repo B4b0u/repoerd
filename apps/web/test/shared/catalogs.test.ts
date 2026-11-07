@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { en } from '../../src/shared/i18n/locales/en'
+import { groups as enGroups } from '../../src/shared/i18n/locales/en/groups'
 import { fr } from '../../src/shared/i18n/locales/fr'
+import { groups as frGroups } from '../../src/shared/i18n/locales/fr/groups'
 
 function flatten(value: unknown, prefix = ''): Record<string, string> {
   if (typeof value === 'string') return { [prefix]: value }
@@ -43,8 +45,9 @@ const SAME_IN_BOTH = new Set([
   'compare.fields.onUpdate',
 ])
 
-const english = flatten(en)
-const french = flatten(fr)
+// `groups` is registered by the diagram's chunk, outside the initial catalogues.
+const english = flatten({ ...en, groups: enGroups })
+const french = flatten({ ...fr, groups: frGroups })
 
 describe('catalogues', () => {
   it('have the same keys in both languages', () => {

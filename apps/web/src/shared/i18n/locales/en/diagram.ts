@@ -104,17 +104,4 @@ export const diagram = {
     none: 'No related table',
     open: 'Open in main view',
   },
-  groups: {
-    proposed_one: '{{count}} group proposed from the schema files',
-    proposed_other: '{{count}} groups proposed from the schema files',
-    tag: 'Group: {{name}}',
-    undo: 'Undo',
-    deleted: 'Group "{{name}}" deleted.',
-    placed_one: '{{count}} table placed in "{{name}}".',
-    placed_other: '{{count}} tables placed in "{{name}}".',
-    ungrouped_one: '{{count}} table taken out of its group.',
-    ungrouped_other: '{{count}} tables taken out of their group.',
-    followFile_one: '{{count}} table follows its file again.',
-    followFile_other: '{{count}} tables follow their file again.',
-  },
 }

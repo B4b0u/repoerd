@@ -5,6 +5,7 @@ import { useThemeContext } from '../../shared/theme/theme-context'
 import { TableIcon } from '../../shared/ui/icons'
 import { ColumnIcon } from './ColumnIcon'
 import type { GroupColors } from './groups/group-colors'
+import { useGroupsTranslation } from './groups/groups-i18n'
 import { changeOf, MARK } from './model/change-marks'
 import { columnChangeTitle, type NodeDiff, typeChange } from './model/diff-view'
 import { HEADER_HEIGHT, ROW_HEIGHT, TABLE_NAME_HEIGHT, TABLE_WIDTH } from './model/dimensions'
@@ -22,11 +23,11 @@ function HubColumnBadge({ table }: { table: string }) {
 
 /** On a table outside its group's frame: the group's name, since colour alone says nothing. */
 function GroupTag({ name, colors }: { name: string; colors: GroupColors }) {
-  const { t } = useTranslation('diagram')
+  const { t } = useGroupsTranslation()
   return (
     <span
       className="table-node__group-tag"
-      title={t('groups.tag', { name })}
+      title={t('tag', { name })}
       style={{ background: colors.label, color: colors.labelText }}
     >
       {name}

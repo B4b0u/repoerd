@@ -6,6 +6,7 @@ import {
   inverseOf,
   newGroup,
   placeEdits,
+  undoEdits,
 } from '../../src/features/diagram/groups/edits'
 
 const table = (name: string, file?: string): Table => ({
@@ -154,6 +155,26 @@ describe('inverseOf', () => {
     const edits = [{ kind: 'saveAll' as const, groups: [], assignments: {} }]
     expect(inverseOf(edits, current)).toEqual([
       { kind: 'saveAll', groups: current.groups, assignments: current.assignments },
+    ])
+  })
+})
+
+describe('undoEdits', () => {
+  it('does not bring back a group someone deleted after the gesture', () => {
+    const edits = placeEdits(schema, current, ['post'], 'auth')
+    const later = { ...current, groups: [blog] }
+    expect(undoEdits(edits, current, later)).toEqual([
+      { kind: 'saveGroup', group: blog },
+      { kind: 'place', assignments: {}, clear: ['post'] },
+    ])
+  })
+
+  it('brings back the group the gesture deleted', () => {
+    const edits = [{ kind: 'deleteGroup' as const, groupId: 'auth' }]
+    const later = { ...current, groups: [blog], assignments: {} }
+    expect(undoEdits(edits, current, later)).toEqual([
+      { kind: 'saveGroup', group: auth },
+      { kind: 'place', assignments: { comment: 'auth' }, clear: [] },
     ])
   })
 })
