@@ -209,9 +209,9 @@
 }
 
 /* Group frames: in the canvas's coordinates, under the edges and the cards, never in the way. */
-/* Applies to any ViewportPortal content of this canvas: the group frames rely on it. */
+/* Applies to any ViewportPortal content of this canvas: the group frames rely on it. No z-index
+   here: the frames and their labels each take their own place among the cards. */
 .diagram-canvas .react-flow__viewport-portal {
-  z-index: -1;
   pointer-events: none;
 }
 
@@ -220,6 +220,7 @@
   position: absolute;
   top: 0;
   left: 0;
+  z-index: -1;
   border: 2px solid var(--group-stroke);
   border-radius: 16px;
   background: var(--group-fill);
@@ -230,12 +231,15 @@
   border-style: dashed;
 }
 
-/* Inert for now, but it can be hovered (its title shows a long name in full). */
+/* Inert for now, but it can be hovered (its title shows a long name in full). Placed on its
+   frame through --frame-x, --frame-y and --frame-width; drawn after the frames, under the cards. */
 .group-frame__label {
+  box-sizing: border-box;
   position: absolute;
-  top: 4px;
-  left: 12px;
-  max-width: calc(100% - 24px);
+  top: 0;
+  left: 0;
+  z-index: -1;
+  max-width: calc(var(--frame-width) - 24px);
   padding: 2px 8px;
   overflow: hidden;
   border-radius: 999px;
@@ -244,18 +248,28 @@
   line-height: 16px;
   text-overflow: ellipsis;
   white-space: nowrap;
+  transform: translate(calc(var(--frame-x) + 12px), calc(var(--frame-y) + 4px));
   pointer-events: auto;
   cursor: default;
 }
 
-/* Semantic zoom: the group names grow like the table names, to stay readable. */
+/* Semantic zoom: the schema reads as a map of domains. The group names grow like the table
+   names, sit on top of their frame (growing upward, outside it) and above the cards, and are
+   bounded by the screen, not by the frame, which can be narrower than one word at this zoom. */
 .react-flow[data-overview] .group-frame__label {
-  top: calc(4px / var(--canvas-zoom, 1));
-  left: calc(12px / var(--canvas-zoom, 1));
-  max-width: calc(100% - 24px / var(--canvas-zoom, 1));
+  z-index: 2000;
+  max-width: max(
+    calc(var(--frame-width) - 24px / var(--canvas-zoom, 1)),
+    calc(320px / var(--canvas-zoom, 1))
+  );
   padding: calc(2px / var(--canvas-zoom, 1)) calc(8px / var(--canvas-zoom, 1));
   font-size: calc(14px / var(--canvas-zoom, 1));
   line-height: 1.2;
+  transform: translate(
+      calc(var(--frame-x) + 12px / var(--canvas-zoom, 1)),
+      calc(var(--frame-y) - 4px / var(--canvas-zoom, 1))
+    )
+    translateY(-100%);
 }
 
 /* Branch comparison: colour and symbol, never colour alone. */

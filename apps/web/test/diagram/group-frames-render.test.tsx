@@ -131,7 +131,7 @@ const frames = (container: HTMLElement) => [
   ...container.querySelectorAll<HTMLElement>('.group-frame'),
 ]
 const labels = (container: HTMLElement) =>
-  frames(container).map((f) => f.querySelector('.group-frame__label')?.textContent)
+  [...container.querySelectorAll<HTMLElement>('.group-frame__label')].map((l) => l.textContent)
 
 describe('group frames on the diagram', () => {
   it('draws dashed frames and a banner for proposed groups', async () => {
@@ -153,6 +153,15 @@ describe('group frames on the diagram', () => {
     expect(labels(container).sort()).toEqual(['Accounts', 'Billing'])
     for (const frame of frames(container)) {
       expect(frame.classList).not.toContain('group-frame--proposed')
+      // The label sits on its frame, outside it in the DOM (it rises above the cards).
+      const label = container.querySelector<HTMLElement>(
+        `.group-frame__label[data-label-of="${frame.dataset.groupId}"]`,
+      )
+      expect(frame.contains(label)).toBe(false)
+      expect(frame.style.transform).toBe(
+        `translate(${label?.style.getPropertyValue('--frame-x')}, ${label?.style.getPropertyValue('--frame-y')})`,
+      )
+      expect(label?.style.getPropertyValue('--frame-width')).toBe(frame.style.width)
     }
     expect(screen.queryByText(/groups proposed/)).toBeNull()
   })
@@ -177,7 +186,7 @@ describe('group frames on the diagram', () => {
     const frame = frames(container)[0] as HTMLElement
     // A click only: a mouse down reaches d3-zoom (the canvas pans from a label), which jsdom
     // cannot run.
-    fireEvent.click(frame.querySelector('.group-frame__label') as HTMLElement)
+    fireEvent.click(container.querySelector('.group-frame__label') as HTMLElement)
     fireEvent.click(frame)
     expect(updateView).not.toHaveBeenCalledWith(
       expect.objectContaining({ active: expect.any(String) }),

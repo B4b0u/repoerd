@@ -100,7 +100,9 @@ export function useGroupDisplay(
 
 /**
  * The frames, drawn in the canvas's own coordinates under the cards. They are not React Flow
- * nodes, so they stay out of the highlight, the mini map, `fitView` and table clicks.
+ * nodes, so they stay out of the highlight, the mini map, `fitView` and table clicks. The
+ * labels are siblings of the frames, not children: in the overview they rise above the cards
+ * (see diagram.css), which a frame's own stacking context would prevent.
  */
 export function GroupFrames({ frames, proposed }: { frames: DrawnFrame[]; proposed: boolean }) {
   const { theme } = useThemeContext()
@@ -123,15 +125,29 @@ export function GroupFrames({ frames, proposed }: { frames: DrawnFrame[]; propos
                 '--group-fill': colors.fill,
               } as CSSProperties
             }
+          />
+        )
+      })}
+      {frames.map((frame) => {
+        const colors: GroupColors = frame.colors[theme]
+        return (
+          <span
+            key={frame.groupId}
+            className="group-frame__label"
+            data-label-of={frame.groupId}
+            title={frame.name}
+            style={
+              {
+                '--frame-x': `${frame.x}px`,
+                '--frame-y': `${frame.y}px`,
+                '--frame-width': `${frame.width}px`,
+                background: colors.label,
+                color: colors.labelText,
+              } as CSSProperties
+            }
           >
-            <span
-              className="group-frame__label"
-              title={frame.name}
-              style={{ background: colors.label, color: colors.labelText }}
-            >
-              {frame.name}
-            </span>
-          </div>
+            {frame.name}
+          </span>
         )
       })}
     </ViewportPortal>
