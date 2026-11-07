@@ -105,12 +105,28 @@ type Relationship = DbSchema['relationships'][number]
 
 /**
  * Positions of `tableNames`. With a `membership` (table → group id, or null), each group's tables
- * are laid out together, apart from the other groups and from the ungrouped tables.
+ * are laid out together, apart from the other groups and from the ungrouped tables; when ELK
+ * cannot lay the groups out, the tables are laid out without them, so that the diagram shows.
  */
 export async function layoutTables(
   schema: DbSchema,
   tableNames: readonly string[],
   mode: DisplayMode = 'ALL_FIELDS',
+  membership?: ReadonlyMap<string, string | null>,
+): Promise<Map<string, Point>> {
+  const grouped = tableNames.some((name) => (membership?.get(name) ?? null) !== null)
+  if (!grouped) return layoutOnce(schema, tableNames, mode)
+  try {
+    return await layoutOnce(schema, tableNames, mode, membership)
+  } catch {
+    return layoutOnce(schema, tableNames, mode)
+  }
+}
+
+async function layoutOnce(
+  schema: DbSchema,
+  tableNames: readonly string[],
+  mode: DisplayMode,
   membership?: ReadonlyMap<string, string | null>,
 ): Promise<Map<string, Point>> {
   const names = new Set(tableNames)
