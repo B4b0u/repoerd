@@ -42,6 +42,8 @@ export function PlaceSelectionBar({ tables, onPlaced, onClear }: Props) {
   const { t } = useGroupsTranslation()
   const [creating, setCreating] = useState(false)
   const [draft, setDraft] = useState('')
+  // A placement is on its way: a second click would place the tables twice.
+  const [placing, setPlacing] = useState(false)
   const input = useRef<HTMLInputElement>(null)
   const newButton = useRef<HTMLButtonElement>(null)
   const wasCreating = useRef(false)
@@ -55,10 +57,14 @@ export function PlaceSelectionBar({ tables, onPlaced, onClear }: Props) {
 
   const { view, edits, schema } = editing
   const count = tables.length
-  const placed = (done: Promise<boolean>) =>
-    void done.then((ok) => {
-      if (ok) onPlaced(tables)
-    })
+  const placed = (done: Promise<boolean>) => {
+    setPlacing(true)
+    void done
+      .then((ok) => {
+        if (ok) onPlaced(tables)
+      })
+      .finally(() => setPlacing(false))
+  }
   const placeIn = (target: string | null, undoLabel: string) =>
     placed(edits.place(tables, target, { undoLabel }))
   const name = draft.trim()
@@ -89,6 +95,7 @@ export function PlaceSelectionBar({ tables, onPlaced, onClear }: Props) {
             size="sm"
             className="max-w-48"
             title={group.name}
+            disabled={placing}
             onClick={() => placeIn(group.id, t('notices.placed', { count, name: group.name }))}
           >
             <GroupSwatch color={group.color} />
@@ -98,6 +105,7 @@ export function PlaceSelectionBar({ tables, onPlaced, onClear }: Props) {
         <Button
           variant="outline"
           size="sm"
+          disabled={placing}
           onClick={() => placeIn(null, t('notices.ungrouped', { count }))}
         >
           {t('ungrouped')}
@@ -134,7 +142,7 @@ export function PlaceSelectionBar({ tables, onPlaced, onClear }: Props) {
               setCreating(false)
             }}
           />
-          <Button type="submit" size="sm" disabled={name === ''}>
+          <Button type="submit" size="sm" disabled={name === '' || placing}>
             {t('detail.create')}
           </Button>
           <Button type="button" size="sm" variant="ghost" onClick={() => setCreating(false)}>

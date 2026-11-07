@@ -20,6 +20,7 @@ import {
 import { PageMessage } from '../../shared/ui/PageMessage'
 import { type SaveOutcome, saveLayout, savePositions, trackLayoutSave, useLayout } from './api'
 import { FlowCanvas } from './FlowCanvas'
+import { GroupLayoutOffer, hadLayoutBeforeVisit } from './groups/GroupLayoutOffer'
 import { GroupsBanner } from './groups/GroupsBanner'
 import { useGroupEditing } from './groups/group-editing'
 import type { GroupView } from './groups/group-view'
@@ -123,6 +124,8 @@ export function DiagramCanvas({
   const { fitView } = useReactFlow()
   const apiMessage = useApiErrorMessage()
   const [placeError, setPlaceError] = useState<unknown>()
+  // The user had arranged this diagram before this visit (not laid out by it).
+  const [hadLayout, setHadLayout] = useState(false)
   // Several tables can be selected and placed into a group together (editing commands only).
   const selectable = useGroupEditing()?.editable === true
 
@@ -210,10 +213,12 @@ export function DiagramCanvas({
   useEffect(() => {
     if (!layout.data || placed.current || groupsLoading) return
     let cancelled = false
+    const hasSavedPositions = layout.data.positions.length > 0
     placeTables(schema, layout.data.positions, mode, membership).then(
       ({ positions, added }) => {
         if (cancelled) return
         placed.current = true
+        setHadLayout(hadLayoutBeforeVisit(repo, sourceId, mode, hasSavedPositions))
         show(positions)
         // Auto-placed tables are saved right away so they never move by themselves later.
         void batcher.addAll(savablePositions(added, diff))
@@ -225,7 +230,7 @@ export function DiagramCanvas({
     return () => {
       cancelled = true
     }
-  }, [layout.data, schema, mode, show, batcher, diff, membership, groupsLoading])
+  }, [layout.data, schema, mode, show, batcher, diff, membership, groupsLoading, repo, sourceId])
 
   const onNodeDragStop = useCallback(
     (_event: unknown, _node: TableFlowNode, dragged: TableFlowNode[]) => {
@@ -313,6 +318,18 @@ export function DiagramCanvas({
           />
         )}
       </FlowCanvas>
+      <GroupLayoutOffer
+        repo={repo}
+        sourceId={sourceId}
+        eligible={
+          hadLayout &&
+          groups !== undefined &&
+          !groups.loading &&
+          !groups.proposed &&
+          groups.groups.length > 0
+        }
+        onLayOut={() => setConfirmingRearrange(true)}
+      />
       <AlertDialog open={confirmingRearrange} onOpenChange={setConfirmingRearrange}>
         <AlertDialogContent>
           <AlertDialogHeader>

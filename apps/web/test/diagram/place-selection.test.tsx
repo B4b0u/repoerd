@@ -193,6 +193,22 @@ describe('placing selected tables into a group', () => {
     expect([...undo.clear].sort()).toEqual(['invoices', 'users'])
   })
 
+  it('places the selection once on a double click', async () => {
+    const { server } = renderWorkspace()
+    await groupsLoaded()
+    await shiftClick('users', 'invoices')
+    const bar = await screen.findByRole('toolbar', { name: 'Selected tables' })
+    const accounts = within(bar).getByRole('button', { name: 'Accounts' })
+    fireEvent.click(accounts)
+    fireEvent.click(accounts)
+
+    await waitFor(() =>
+      expect(screen.queryByRole('toolbar', { name: 'Selected tables' })).toBeNull(),
+    )
+    await act(() => new Promise((resolve) => setTimeout(resolve, 50)))
+    expect(server.sent).toHaveLength(1)
+  })
+
   it('takes the selected tables out of any group', async () => {
     const { server } = renderWorkspace()
     await groupsLoaded()

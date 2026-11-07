@@ -42,6 +42,12 @@ export const groups: GroupsCatalog = {
     placeInto: 'Ranger dans…',
     clear: 'Vider la sélection',
   },
+  layoutOffer: {
+    message:
+      'Ce schéma a des groupes de tables : votre diagramme peut être rangé groupe par groupe.',
+    accept: 'Ranger mon diagramme par groupe',
+    decline: 'Non merci',
+  },
   notices: {
     deleted: 'Groupe « {{name}} » supprimé.',
     placed_one: '{{count}} table rangée dans « {{name}} ».',

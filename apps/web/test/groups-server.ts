@@ -28,9 +28,16 @@ function editOf(method: string, path: string, body: Record<string, unknown>): Gr
 
 /**
  * A server answering the group routes from `state`, which every write changes as the real one
- * would, and any other read with no saved positions. `sent`: the group writes, in order.
+ * would, and any other read with the saved `positions` (none by default). `sent`: the group
+ * writes, in order.
  */
-export function fakeGroupsServer(initial: State, { canEdit = true }: { canEdit?: boolean } = {}) {
+export function fakeGroupsServer(
+  initial: State,
+  {
+    canEdit = true,
+    positions = [],
+  }: { canEdit?: boolean; positions?: { table: string; x: number; y: number }[] } = {},
+) {
   const server = {
     state: initial,
     sent: [] as SentRequest[],
@@ -42,9 +49,7 @@ export function fakeGroupsServer(initial: State, { canEdit = true }: { canEdit?:
       const method = init?.method ?? 'GET'
       const isGroups = /\/groups(-assignments)?[/?]/.test(String(path))
       if (method === 'GET') {
-        return isGroups
-          ? Response.json({ ...server.state, canEdit })
-          : Response.json({ positions: [] })
+        return isGroups ? Response.json({ ...server.state, canEdit }) : Response.json({ positions })
       }
       if (!isGroups) return new Response(null, { status: 204 })
       const body = init?.body ? JSON.parse(init.body as string) : undefined

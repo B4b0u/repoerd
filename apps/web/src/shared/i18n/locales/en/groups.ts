@@ -48,6 +48,12 @@ export const groups = {
     placeInto: 'Place into…',
     clear: 'Clear the selection',
   },
+  /** Once, to lay out by group a diagram arranged before its groups were saved. */
+  layoutOffer: {
+    message: 'This schema has table groups: your diagram can be laid out group by group.',
+    accept: 'Lay out my diagram by group',
+    decline: 'No thanks',
+  },
   notices: {
     deleted: 'Group "{{name}}" deleted.',
     placed_one: '{{count}} table placed in "{{name}}".',

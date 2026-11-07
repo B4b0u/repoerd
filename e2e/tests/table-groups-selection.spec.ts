@@ -1,7 +1,8 @@
 import type { Locator, Page } from '@playwright/test'
-import { expect, mainCanvas, test } from './fixtures'
+import { expect, mainCanvas, skipGroupLayoutOffer, test } from './fixtures'
 
-// acme/storefront: no other spec writes its groups (one proposed group per Prisma model file).
+// acme/storefront: one proposed group per Prisma model file. table-groups-editing.spec.ts writes
+// its groups too, only the marketing and catalog ones.
 
 interface Point {
   x: number
@@ -10,6 +11,8 @@ interface Point {
 
 /** Opens the storefront once its cards are placed (the first layout is saved on the way). */
 async function open(page: Page) {
+  // Once the groups are saved, a later visit offers to lay the diagram out by group.
+  await skipGroupLayoutOffer(page, 'acme/storefront', 'prisma/schema.prisma')
   await page.goto('/acme/storefront')
   const canvas = mainCanvas(page)
   await expect(canvas.locator('.react-flow__node[data-id="customers"]')).toBeVisible()
