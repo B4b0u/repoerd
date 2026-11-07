@@ -4,9 +4,13 @@ packages:
   - e2e
 
 onlyBuiltDependencies:
-  - better-sqlite3
   - '@swc/core'
   - esbuild
+
+# better-sqlite3 13 ships N-API prebuilds for every platform the image targets. Its implicit
+# `node-gyp rebuild` would only check for them, and fails where Python is missing (Docker build).
+ignoredBuiltDependencies:
+  - better-sqlite3
 
 patchedDependencies:
   '@liam-hq/schema@0.6.1': patches/@liam-hq__schema@0.6.1.patch
