@@ -13,4 +13,8 @@ Showcases (the demo and the README screenshots):
 - `acme/storefront` — Prisma 7 with `prisma.config.ts`, models in `prisma/models/`, an `inventory` Postgres schema, composite keys and a composite foreign key. Branch `feature/subscriptions` forks from `main-at-fork`; `main` moved on since.
 - `acme/helpdesk` — Drizzle with `casing: 'snake_case'`, schema files spread over a barrel and a `@/` path alias, spread columns (object literals and calls of local helpers), extra config in array form (`unique().on()`, composite `foreignKey()`, `check()`), `pgEnum` and an `audit` Postgres schema. Branch `feature/sla-escalations` forks from `main-at-fork`; `main` moved on since.
 
+Feature demos:
+
+- `acme/crm` — Drizzle multi-tenant CRM where `workspaces` is a hub table (referenced by 9 of the 12 tables, reachable through other tables for most of them: try the first-order hub links), `customType` columns (named `citext` and `tsvector` helpers in another file, an inline `numeric(12, 2)`), and spread calls of functions from another file (`...tenant()`, `...timestamps()`). Branch `feature/invoicing` adds invoices (no declared fork point: compared with the base commit).
+
 Never copy code from real (company) projects here: this repository is public.
