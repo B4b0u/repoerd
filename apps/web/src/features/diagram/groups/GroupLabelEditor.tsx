@@ -51,7 +51,7 @@ export function GroupLabelEditor({ group, editing, className, children, ...butto
     setOpen(next)
   }
 
-  const save = (change: Pick<TableGroup, 'name'> | Pick<TableGroup, 'color'>) =>
+  const save = (change: { name: string } | { color: string }) =>
     void editing.edits.run((current) => {
       const saved = current.groups.find((g) => g.id === group.id)
       return saved ? [{ kind: 'saveGroup', group: { ...saved, ...change } }] : []
