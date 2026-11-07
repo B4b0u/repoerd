@@ -67,7 +67,11 @@ interface Sent {
   body: unknown
 }
 
-function mount(initial: Omit<TableGroupsResponse, 'canEdit'>, canEdit = true) {
+function mount(
+  initial: Omit<TableGroupsResponse, 'canEdit'>,
+  canEdit = true,
+  options: { schema?: DbSchema; refuseWrites?: boolean } = {},
+) {
   let state = initial
   const sent: Sent[] = []
   vi.stubGlobal(
@@ -78,6 +82,12 @@ function mount(initial: Omit<TableGroupsResponse, 'canEdit'>, canEdit = true) {
         if (method === 'GET') return Response.json({ ...state, canEdit })
         const body = init?.body ? JSON.parse(init.body as string) : undefined
         sent.push({ method, path, body })
+        if (options.refuseWrites) {
+          return Response.json(
+            { error: { code: 'internal', message: 'boom', details: {} } },
+            { status: 500 },
+          )
+        }
         if (method === 'PUT' && path.includes('/groups?')) state = { configured: true, ...body }
         return new Response(null, { status: 204 })
       }
@@ -94,7 +104,7 @@ function mount(initial: Omit<TableGroupsResponse, 'canEdit'>, canEdit = true) {
     return (
       <DiagramWorkspace
         repo={repo}
-        schema={schema}
+        schema={options.schema ?? schema}
         sourceId={sourceId}
         viewState={parseViewState('')}
         updateView={() => {}}
@@ -197,5 +207,31 @@ describe('propose again', () => {
       control.setSource('other')
     })
     expect(screen.queryByRole('status')).toBeNull()
+    await act(async () => {
+      control.setSource(source)
+    })
+    await screen.findByRole('button', { name: REPROPOSE })
+    expect(screen.queryByRole('status')).toBeNull()
+  })
+
+  it('is not offered when the files propose nothing', async () => {
+    const bare: DbSchema = {
+      ...schema,
+      tables: { user: { ...table('user', 'x'), file: undefined } },
+    }
+    mount(saved, true, { schema: bare })
+    await screen.findByRole('button', { name: 'Zoom in' })
+    expect(screen.queryByRole('button', { name: REPROPOSE })).toBeNull()
+  })
+
+  it('stays in the preview when the replacement is refused', async () => {
+    const user = userEvent.setup()
+    const { sent } = mount(saved, true, { refuseWrites: true })
+    await user.click(await screen.findByRole('button', { name: REPROPOSE }))
+    await user.click(await screen.findByRole('button', { name: REPLACE }))
+    await waitFor(() => expect(sent).toHaveLength(1))
+    await act(() => new Promise((resolve) => setTimeout(resolve, 50)))
+    expect(screen.getByRole('button', { name: REPLACE })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeTruthy()
   })
 })

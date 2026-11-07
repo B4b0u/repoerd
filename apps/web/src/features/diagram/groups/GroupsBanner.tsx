@@ -24,10 +24,11 @@ export function GroupsBanner({ repo, sourceId, schema, view, onLeaveReproposal }
   const saveProposals = () => run([{ kind: 'saveAll', groups: view.groups, assignments: {} }])
   const ignoreProposals = () => run([{ kind: 'saveAll', groups: [], assignments: {} }])
   const replace = async () => {
-    await run([{ kind: 'saveAll', groups: view.groups, assignments: {} }], {
+    const done = await run([{ kind: 'saveAll', groups: view.groups, assignments: {} }], {
       undoLabel: t('replaced'),
     })
-    onLeaveReproposal()
+    // A refusal keeps the preview, so that the replacement can be tried again.
+    if (done) onLeaveReproposal()
   }
   return (
     <div

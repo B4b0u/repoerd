@@ -59,7 +59,7 @@ const PROBLEM_LIMITS: Partial<Record<TableGroupsProblem, number>> = {
  */
 const queues = new WeakMap<QueryClient, Map<string, Promise<unknown>>>()
 
-function enqueue(client: QueryClient, key: QueryKey, task: () => Promise<void>): Promise<void> {
+function enqueue<T>(client: QueryClient, key: QueryKey, task: () => Promise<T>): Promise<T> {
   const byKey = queues.get(client) ?? new Map<string, Promise<unknown>>()
   queues.set(client, byKey)
   const id = JSON.stringify(key)
@@ -99,20 +99,20 @@ export function useGroupEdits(repo: RepoRef, sourceId: string, schema: DbSchema,
     toast.error(apiErrorMessage(tErrors, error instanceof Error ? error : new Error(String(error))))
   }
 
-  async function perform(gesture: GroupGesture, options: GroupEditOptions): Promise<void> {
+  async function perform(gesture: GroupGesture, options: GroupEditOptions): Promise<boolean> {
     let cached: TableGroupsResponse
     try {
       cached = await queryClient.ensureQueryData(groupsQuery(repo, sourceId))
     } catch (error) {
       report(error)
-      return
+      return false
     }
     const first: GroupEdit | undefined = cached.configured
       ? undefined
       : { kind: 'saveAll', groups: view.groups, assignments: {} }
     const base = first === undefined ? cached : applyEdits(cached, [first])
     const edits = typeof gesture === 'function' ? gesture(base) : gesture
-    if (edits.length === 0) return
+    if (edits.length === 0) return true
     // A gesture that replaces everything makes the proposals' save useless.
     const requests = first === undefined || edits[0]?.kind === 'saveAll' ? edits : [first, ...edits]
 
@@ -128,7 +128,7 @@ export function useGroupEdits(repo: RepoRef, sourceId: string, schema: DbSchema,
     } catch (error) {
       queryClient.setQueryData(key, applied)
       report(error)
-      return
+      return false
     } finally {
       void queryClient.invalidateQueries({ queryKey: key })
     }
@@ -140,12 +140,14 @@ export function useGroupEdits(repo: RepoRef, sourceId: string, schema: DbSchema,
         },
       })
     }
+    return true
   }
 
-  async function run(gesture: GroupGesture, options: GroupEditOptions = {}): Promise<void> {
+  /** Resolves to whether the gesture went through (a refusal is reported, not thrown). */
+  async function run(gesture: GroupGesture, options: GroupEditOptions = {}): Promise<boolean> {
     setRunning((n) => n + 1)
     try {
-      await enqueue(queryClient, key, () => perform(gesture, options))
+      return await enqueue(queryClient, key, () => perform(gesture, options))
     } finally {
       setRunning((n) => n - 1)
     }

@@ -1,12 +1,13 @@
 import {
   type DbSchema,
   type DisplayMode,
+  proposeGroups,
   type RepoRef,
   relationshipStatus,
   type SchemaDiff,
 } from '@repoerd/model'
 import { ReactFlowProvider, useReactFlow } from '@xyflow/react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { motionDuration } from '../../shared/lib/motion'
 import { ChangesPanel } from '../compare/ChangesPanel'
@@ -96,7 +97,15 @@ function Workspace({
       }),
     [schema, groupsQuery.data, proposalSchema, groupsQuery.isPending, reproposed],
   )
-  const canRepropose = groupsQuery.data?.configured === true && groups.canEdit && !reproposed
+  // Back to the saved groups when the source changes (also on a later return to this source).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runs on the source change only
+  useEffect(() => setReproposedFor(undefined), [sourceId])
+  const hasProposals = useMemo(
+    () => proposeGroups(proposalSchema ?? schema).length > 0,
+    [proposalSchema, schema],
+  )
+  const canRepropose =
+    groupsQuery.data?.configured === true && groups.canEdit && !reproposed && hasProposals
   const changedOnly = viewState.changed === true
   // Leaving the related view remounts the full canvas: it centres the table once placed.
   const [centerAfterRemount, setCenterAfterRemount] = useState<string>()
