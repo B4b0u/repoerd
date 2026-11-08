@@ -1,6 +1,6 @@
 {
   "name": "repoerd",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Self-hosted ER diagrams of the Prisma and Drizzle schemas in your GitHub repositories, branch by branch.",
   "private": true,
   "license": "MIT",
