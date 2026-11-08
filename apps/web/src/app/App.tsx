@@ -2,7 +2,6 @@ import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from '@ta
 import { lazy, Suspense } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Route, Switch } from 'wouter'
-import { RepoListPage } from '../features/repo-picker/RepoListPage'
 import { handleQueryError, shouldRetry } from '../shared/api/session'
 import { usePageTitle } from '../shared/lib/page-title'
 import { ThemeProvider } from '../shared/theme/theme-context'
@@ -29,7 +28,12 @@ export function createQueryClient(): QueryClient {
 const queryClient = createQueryClient()
 
 // Loaded with their route: the diagram (React Flow) and the admin screens stay out of the code
-// downloaded for the repository list.
+// downloaded for the repository list. The list itself, the usual first page, is out of the first
+// download too, but fetched at once: "/" does not wait for its route to render to ask for it.
+const repoListPage = import('../features/repo-picker/RepoListPage')
+// A failed download is reported by the route (error boundary), not as an unhandled rejection.
+repoListPage.catch(() => {})
+const RepoListPage = lazy(() => repoListPage.then((module) => ({ default: module.RepoListPage })))
 const AdminPage = lazy(() =>
   import('../features/admin/AdminPage').then((module) => ({ default: module.AdminPage })),
 )
