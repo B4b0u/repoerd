@@ -8,7 +8,7 @@ All notable changes to RepoERD are documented here. The format follows [Keep a C
 
 ### Added
 
-- A new repository page: favourites and the repositories you opened last as cards at the top, the schema format of each repository (Prisma or Drizzle, detected in the background, stored and checked again after a push), the list grouped by organisation, and a "With a schema" filter, on by default, that hides repositories without one until you ask to see them all.
+- A new repository page: favourites and the repositories you opened last as cards at the top, the schema format of each repository (Prisma or Drizzle, detected in the background, stored and checked again after a push), the list grouped by organisation, and a "With a schema" filter, on by default, that hides repositories without one until you ask to see them all. A repository whose only Drizzle config targets another database than PostgreSQL counts as without a schema; a very large repository whose tree GitHub truncates keeps the formats found in it and, when none is found, is checked again a day later.
 - Table groups, shared by the team: groups are proposed from the schema files (one per domain folder, else per file, else per Postgres schema), then saved, ignored or proposed again by anyone with push access. Groups are edited on the diagram: rename, recolour (12 colours or a custom one), delete, place tables from their details or by selecting several with Shift, with "Undo". A group moves by dragging its label. Frames and coloured cards on the diagram, the table list by group, and an automatic layout by group. A diagram arranged before its groups existed is offered once to be laid out by group ("Lay out my diagram by group").
 - The file that declares each table, shown in its details.
 - Hub tables: a table referenced by more than 30% of the tables is detected as a hub (typical: `organizations` in a multi-tenant schema), and "Treat as hub table" in the details of a table adds or removes one. The links of hub tables can be drawn all, first-order only, or hidden; hovering or selecting a table draws its hidden links again, and a column whose link is hidden points to its hub. The hub tables and the link mode are in the URL.
@@ -17,8 +17,6 @@ All notable changes to RepoERD are documented here. The format follows [Keep a C
 ### Changed
 
 - Far out in the overview, group and table names keep a readable size and the names that would overlap are left out until you zoom in, like the labels of a map.
-- On the repository page, a repository whose only Drizzle config targets another database than PostgreSQL (MySQL, SQLite) counts as without a schema.
-- A repository whose tree GitHub truncates keeps the schema formats found in the partial tree; when it shows none, the repository is checked again a day later instead of every hour.
 - The Docker image uses the prebuilt binaries of better-sqlite3 13 instead of compiling them, keeps only the binary of its own platform (about 14 MB smaller), and is based on an updated `node:24-slim` image.
 
 ### Fixed
@@ -26,7 +24,6 @@ All notable changes to RepoERD are documented here. The format follows [Keep a C
 - Drizzle: spread columns returned by a top-level function without parameters (`...timestamps()`) are read, like those of an object literal.
 - Drizzle: a `customType` column shows the type its `dataType()` returns when that is a string literal.
 - An empty GitHub repository (no commit yet) is read as a repository without a branch instead of an error, and the repository page lists it without a schema.
-- A table name with control characters, quotes or backslashes can no longer break out of the style of the overview labels.
 
 ### Security
 
