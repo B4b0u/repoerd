@@ -13,4 +13,6 @@ export const repos: Catalog['repos'] = {
   install: 'Installer la GitHub App',
   refresh: 'Actualiser la liste',
   refreshed: 'La liste a été actualisée : toujours aucun dépôt visible.',
+  favoriteFailed: 'Impossible de modifier les favoris.',
+  tooManyFavorites: 'Au plus {{max}} favoris.',
 }

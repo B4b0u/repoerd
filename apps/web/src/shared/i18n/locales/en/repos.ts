@@ -11,4 +11,6 @@ export const repos = {
   install: 'Install the GitHub App',
   refresh: 'Refresh the list',
   refreshed: 'The list was refreshed: still no repository visible.',
+  favoriteFailed: 'Could not update the favourites.',
+  tooManyFavorites: 'At most {{max}} favourites.',
 }
