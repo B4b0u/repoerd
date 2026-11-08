@@ -2,7 +2,7 @@
 
 RepoERD is a self-hosted web app that shows the database schema of your GitHub repositories as an entity-relationship diagram, branch by branch. It reads Prisma and Drizzle (PostgreSQL) schemas straight from the code: nothing to install in your projects, no connection to a database. Everyone arranges the tables as on a whiteboard, and RepoERD shows what a branch changes in the schema before you merge it.
 
-![A Prisma schema of 25 tables in RepoERD, dark theme](docs/images/storefront-dark.png)
+![The orders and marketing table groups of a 25-table Prisma schema in RepoERD, each a coloured frame around its tables, with the table list grouped the same way; dark theme](docs/images/storefront-dark.png)
 
 ## Features
 
@@ -25,7 +25,9 @@ RepoERD is a self-hosted web app that shows the database schema of your GitHub r
 | **Comparing a branch with main** | **A modified table, before → after** |
 | ![The changes of the feature/subscriptions branch](docs/images/compare-changes.png) | ![The orders table in the comparison](docs/images/compare-detail.png) |
 
-![The same schema, light theme](docs/images/storefront-light.png)
+![The repository page: two favourites, the three repositories opened last, and every repository with its schema format (Prisma or Drizzle)](docs/images/repositories.png)
+
+![The same table groups, light theme](docs/images/storefront-light.png)
 
 ## Try it in demo mode
 
