@@ -2,6 +2,7 @@ import type { DetectedSource } from '@repoerd/model'
 import { describe, expect, it } from 'vitest'
 import { makeBlobReader } from '../../src/application/services/blob-reader.js'
 import { makeGetBranchSchema } from '../../src/application/use-cases/get-branch-schema.js'
+import type { KnownRepo } from '../../src/domain/repo.js'
 import { type FakeRepoInput, InMemoryGitHost, testRepoId } from '../fakes/in-memory-git-host.js'
 import {
   InMemoryBlobCache,
@@ -31,6 +32,11 @@ function setup(
     toolkit?: StubSchemaToolkit
     settings?: InMemoryRepoSettings
     now?: () => number
+    onDefaultBranchDetected?: (
+      repo: KnownRepo,
+      commitSha: string,
+      detected: DetectedSource[],
+    ) => Promise<void>
   } = {},
 ) {
   const gitHost = new InMemoryGitHost(options.repos ?? [shop], { truncated: options.truncated })
@@ -45,6 +51,7 @@ function setup(
     readBlobs: makeBlobReader({ gitHost, blobCache }),
     settings,
     now: options.now,
+    onDefaultBranchDetected: options.onDefaultBranchDetected,
   })
   return { gitHost, toolkit, schemaCache, blobCache, settings, getBranchSchema }
 }
@@ -427,5 +434,53 @@ describe('getBranchSchema with manual sources', () => {
       ok: false,
       failure: { kind: 'source-empty' },
     })
+  })
+})
+
+describe('getBranchSchema and the stored repository format', () => {
+  function recording(options: { truncated?: boolean } = {}) {
+    const recorded: { repo: KnownRepo; commitSha: string; sources: string[] }[] = []
+    const world = setup({
+      truncated: options.truncated,
+      onDefaultBranchDetected: async (known, commitSha, detected) => {
+        recorded.push({
+          repo: known,
+          commitSha,
+          sources: detected.map((entry) => entry.source.id),
+        })
+      },
+    })
+    return { ...world, recorded }
+  }
+
+  it('records the detection of the default branch', async () => {
+    const { getBranchSchema, gitHost, recorded } = recording()
+    await getBranchSchema({ repo })
+    expect(recorded).toEqual([
+      {
+        repo,
+        commitSha: await gitHost.resolveBranch(repo, 'main'),
+        sources: ['prisma/schema.prisma'],
+      },
+    ])
+    await getBranchSchema({ repo, branch: 'main' })
+    expect(recorded).toHaveLength(2)
+  })
+
+  it('records nothing for another branch or a truncated tree', async () => {
+    const other = recording()
+    await other.getBranchSchema({ repo, branch: 'feature/reviews' })
+    expect(other.recorded).toEqual([])
+    const truncated = recording({ truncated: true })
+    await truncated.getBranchSchema({ repo })
+    expect(truncated.recorded).toEqual([])
+  })
+
+  it('still answers when the record fails', async () => {
+    const { getBranchSchema } = setup({
+      onDefaultBranchDetected: () => Promise.reject(new Error('database is locked')),
+    })
+    const result = await getBranchSchema({ repo })
+    expect(result.ok && result.value.outcome.ok).toBe(true)
   })
 })

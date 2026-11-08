@@ -17,6 +17,7 @@ function world(repos: AccessibleRepo[], formats?: FormatSource) {
   const favorites = new InMemoryFavorites()
   const visits = new InMemoryVisits()
   const asked: { priority: string[] }[] = []
+  const warned: { details: object; message: string }[] = []
   const source: FormatSource = formats ?? {
     async known(_repos, priority) {
       asked.push({ priority: [...priority].sort() })
@@ -29,8 +30,9 @@ function world(repos: AccessibleRepo[], formats?: FormatSource) {
     visits,
     formats: source,
     now: () => NOW,
+    logger: { warn: (details, message) => warned.push({ details, message }) },
   })
-  return { repoList, favorites, visits, directory, asked }
+  return { repoList, favorites, visits, directory, asked, warned }
 }
 
 const alpha = { ...accessible('acme', 'alpha'), ownerAvatarUrl: 'https://avatars.test/acme' }
@@ -85,6 +87,17 @@ describe('repository list', () => {
       [format, false],
       [null, true],
     ])
+  })
+
+  it('lists the repositories without formats when the stored formats cannot be read', async () => {
+    const { repoList, warned } = world([alpha], {
+      known: () => Promise.reject(new Error('database is locked')),
+    })
+    const result = await repoList.list('u')
+    expect(result.ok && result.value.map((r) => [r.name, r.format, r.formatPending])).toEqual([
+      ['alpha', null, false],
+    ])
+    expect(warned).toHaveLength(1)
   })
 
   it('prioritises favourites and the six most recent visits for the format detection', async () => {

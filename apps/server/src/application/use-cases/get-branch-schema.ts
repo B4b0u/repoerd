@@ -1,3 +1,4 @@
+import type { DetectedSource } from '@repoerd/model'
 import type {
   BranchSchemaError,
   BranchSchemaView,
@@ -25,7 +26,19 @@ export type GetBranchSchema = (
   input: GetBranchSchemaInput,
 ) => Promise<Result<BranchSchemaView, BranchSchemaError>>
 
-type Deps = { gitHost: GitHost; settings: RepoSettingsRepository } & (
+type Deps = {
+  gitHost: GitHost
+  settings: RepoSettingsRepository
+  /**
+   * The complete detection of the default branch, as the stored repository format (spec §2.3).
+   * Its failures never fail the request.
+   */
+  onDefaultBranchDetected?: (
+    repo: KnownRepo,
+    commitSha: string,
+    detected: DetectedSource[],
+  ) => Promise<void>
+} & (
   | {
       /** Shared with the other use cases, so their requests share parses (main.ts). */
       commitSchemas: CommitSchemas
@@ -48,6 +61,10 @@ export function makeGetBranchSchema(deps: Deps): GetBranchSchema {
 
     const manual = await deps.settings.get(repo)
     const { detected, truncated } = await detect(repo, commitSha, manual)
+    if (branch === summary.defaultBranch && !truncated && deps.onDefaultBranchDetected) {
+      // The hook logs its own failures (RepoFormatSync.record).
+      await deps.onDefaultBranchDetected(repo, commitSha, detected).catch(() => undefined)
+    }
     const view = (selectedSourceId: string | null, outcome: SchemaOutcome): BranchSchemaView => ({
       repo,
       branch,

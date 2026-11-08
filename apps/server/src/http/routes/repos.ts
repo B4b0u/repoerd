@@ -3,6 +3,7 @@ import {
   type CompareResponse,
   type CompareSideDto,
   type LayoutResponse,
+  type RepoFormatsResponse,
   type RepoListResponse,
   type RepoSettingsResponse,
   repoSettingsBodySchema,
@@ -115,6 +116,20 @@ export function registerRepoRoutes(app: AppHono, deps: AppDeps) {
     })
     if (!result.ok) return accessError(c, result.error)
     return c.json({ repos: result.value } satisfies RepoListResponse)
+  })
+
+  // Polled by the page while formats are being detected: the cached list, no GitHub call.
+  app.get('/api/repo-formats', async (c) => {
+    const result = await deps.repoList.list(c.get('user').id)
+    if (!result.ok) return accessError(c, result.error)
+    return c.json({
+      formats: result.value.map(({ owner, name, format, formatPending }) => ({
+        owner,
+        name,
+        format,
+        formatPending,
+      })),
+    } satisfies RepoFormatsResponse)
   })
 
   const setFavorite = (on: boolean) => async (c: AppContext) => {

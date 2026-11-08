@@ -34,4 +34,18 @@ describe('repository settings', () => {
     expect(result.ok).toBe(false)
     expect(await service.get(repo)).toEqual([])
   })
+
+  it('marks the stored format to re-check once the sources are saved', async () => {
+    const marked: unknown[] = []
+    const service = makeRepoSettings({
+      settings: new InMemoryRepoSettings(),
+      onSourcesSaved: async (saved) => {
+        marked.push(saved)
+      },
+    })
+    await service.save(repo, [{ name: 'core', format: 'prisma', paths: ['../outside'] }], 'alice')
+    expect(marked).toEqual([])
+    await service.save(repo, [{ name: 'core', format: 'prisma', paths: ['db'] }], 'alice')
+    expect(marked).toEqual([repo])
+  })
 })

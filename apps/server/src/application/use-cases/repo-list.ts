@@ -49,7 +49,21 @@ export function makeRepoList(deps: {
   visits: VisitRepository
   formats: FormatSource
   now: () => Date
+  logger: { warn(details: object, message: string): void }
 }) {
+  /** The formats are a convenience: failing to read them never fails the list. */
+  async function knownFormats(
+    repos: readonly AccessibleRepo[],
+    priority: ReadonlySet<string>,
+  ): ReturnType<FormatSource['known']> {
+    try {
+      return await deps.formats.known(repos, priority)
+    } catch (error) {
+      deps.logger.warn({ err: error }, 'Could not read the schema formats of the repositories')
+      return new Map()
+    }
+  }
+
   return {
     async list(
       userId: string,
@@ -65,7 +79,7 @@ export function makeRepoList(deps: {
         .sort(([, a], [, b]) => b.getTime() - a.getTime())
         .slice(0, RECENT_PRIORITY)
         .map(([key]) => key)
-      const formats = await deps.formats.known(listed.value, new Set([...favorites, ...recent]))
+      const formats = await knownFormats(listed.value, new Set([...favorites, ...recent]))
       return ok(
         listed.value.map((repo) => {
           const key = repoKey(repo)

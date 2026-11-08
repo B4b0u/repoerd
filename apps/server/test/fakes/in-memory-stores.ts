@@ -3,6 +3,7 @@ import {
   type DetectedSource,
   type ManualSource,
   originKey,
+  type RepoSchemaFormat,
   TABLE_GROUP_LIMITS,
   type TableGroup,
   type TableGroupConfig,
@@ -21,6 +22,8 @@ import type {
 import {
   type FavoriteRepository,
   MAX_FAVORITES,
+  type RepoFormatRepository,
+  type StoredRepoFormat,
   type VisitRepository,
 } from '../../src/application/ports/repo-picker.js'
 import type { RepoSettingsRepository } from '../../src/application/ports/repo-settings.js'
@@ -385,5 +388,72 @@ export class InMemoryVisits implements VisitRepository {
   }
   async list(userId: string) {
     return new Map(this.byUser.get(userId) ?? [])
+  }
+}
+
+/** Same rules as SqliteRepoFormatRepository; a row without `format` is a never-detected failure. */
+export class InMemoryRepoFormats implements RepoFormatRepository {
+  readonly rows = new Map<
+    string,
+    Omit<StoredRepoFormat, 'format' | 'commitSha'> & {
+      format: RepoSchemaFormat | null
+      commitSha: string | null
+    }
+  >()
+  /** Makes every call throw (a database error). */
+  broken = false
+
+  private check() {
+    if (this.broken) throw new Error('database is locked')
+  }
+
+  async getMany(keys: readonly string[]) {
+    this.check()
+    const found = new Map<string, StoredRepoFormat>()
+    for (const key of keys) {
+      const row = this.rows.get(key)
+      if (row?.format && row.commitSha)
+        found.set(key, { ...row, format: row.format, commitSha: row.commitSha })
+    }
+    return found
+  }
+  async save(
+    repo: KnownRepo,
+    value: { format: RepoSchemaFormat; commitSha: string; checkedAt: Date },
+  ) {
+    this.check()
+    this.rows.set(repoKey(repo), { ...value, failedAt: null, stale: false })
+  }
+  async touch(repo: KnownRepo, checkedAt: Date) {
+    this.check()
+    const row = this.rows.get(repoKey(repo))
+    if (row) row.checkedAt = checkedAt
+  }
+  async markFailed(repo: KnownRepo, at: Date) {
+    this.check()
+    const row = this.rows.get(repoKey(repo))
+    if (row) row.failedAt = at
+    else
+      this.rows.set(repoKey(repo), {
+        format: null,
+        commitSha: null,
+        checkedAt: at,
+        failedAt: at,
+        stale: false,
+      })
+  }
+  async getFailures(keys: readonly string[]) {
+    this.check()
+    const failures = new Map<string, Date>()
+    for (const key of keys) {
+      const failedAt = this.rows.get(key)?.failedAt
+      if (failedAt) failures.set(key, failedAt)
+    }
+    return failures
+  }
+  async markStale(repo: KnownRepo) {
+    this.check()
+    const row = this.rows.get(repoKey(repo))
+    if (row) row.stale = true
   }
 }

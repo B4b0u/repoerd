@@ -87,7 +87,8 @@ describe('HTTP API (fake mode)', () => {
           lastOpenedAt: null,
           ownerAvatarUrl: null,
           format: null,
-          formatPending: false,
+          // Never detected: its detection starts in the background.
+          formatPending: true,
         },
       ],
     })

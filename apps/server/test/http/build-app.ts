@@ -1,6 +1,10 @@
 import { MUTATION_HEADER } from '@repoerd/contracts'
+import type { GitHost } from '../../src/application/ports/git-host.js'
+import type { AccessibleRepo } from '../../src/application/ports/repo-directory.js'
+import type { SchemaToolkit } from '../../src/application/ports/schema-toolkit.js'
 import { makeBlobReader } from '../../src/application/services/blob-reader.js'
 import { makeCommitSchemas } from '../../src/application/services/commit-schemas.js'
+import { makeRepoFormatSync } from '../../src/application/services/repo-format-sync.js'
 import { makeAdmin } from '../../src/application/use-cases/admin.js'
 import { makeAuth } from '../../src/application/use-cases/auth.js'
 import { makeCompareBranchSchemas } from '../../src/application/use-cases/compare-branch-schemas.js'
@@ -30,6 +34,7 @@ import {
   InMemoryFavorites,
   InMemoryInstanceConfig,
   InMemoryLayoutRepository,
+  InMemoryRepoFormats,
   InMemoryRepoSettings,
   InMemorySchemaCache,
   InMemorySessionRepository,
@@ -54,6 +59,8 @@ interface Options {
   userRateLimit?: RateLimiter
   /** The database ping of /healthz (default: always answers). */
   checkDatabase?: () => void
+  /** Other repositories than acme/shop and acme/secret (e.g. the fixtures, fake mode). */
+  repositories?: { gitHost: GitHost; visible: AccessibleRepo[]; toolkit: SchemaToolkit }
 }
 
 /** acme/shop is visible (with write access); acme/secret exists on the host but is not visible. */
@@ -64,21 +71,29 @@ function common(
   now: () => Date,
   options: Options,
 ) {
-  const gitHost = new InMemoryGitHost(
-    [
-      {
-        owner: 'acme',
-        name: 'shop',
-        branches: {
-          main: { 'prisma/schema.prisma': 'users' },
-          [ODD_BRANCH]: { 'prisma/schema.prisma': 'reviews' },
+  const gitHost =
+    options.repositories?.gitHost ??
+    new InMemoryGitHost(
+      [
+        {
+          owner: 'acme',
+          name: 'shop',
+          branches: {
+            main: { 'prisma/schema.prisma': 'users' },
+            [ODD_BRANCH]: { 'prisma/schema.prisma': 'reviews' },
+          },
         },
-      },
-      { owner: 'acme', name: 'secret', branches: { main: { 'prisma/schema.prisma': 'salaries' } } },
-    ],
-    { mergeBases: options.mergeBases },
+        {
+          owner: 'acme',
+          name: 'secret',
+          branches: { main: { 'prisma/schema.prisma': 'salaries' } },
+        },
+      ],
+      { mergeBases: options.mergeBases },
+    )
+  const directory = new InMemoryRepoDirectory(
+    options.repositories?.visible ?? [accessible('acme', 'shop', true)],
   )
-  const directory = new InMemoryRepoDirectory([accessible('acme', 'shop', true)])
   const layouts = new InMemoryLayoutRepository()
   const settings = new InMemoryRepoSettings()
   const tableGroups = new InMemoryTableGroups()
@@ -87,45 +102,66 @@ function common(
   const repoAccess = makeRepoAccess({ directory, config })
   const logged: object[] = []
   const warned: object[] = []
+  const logger: CommonDeps['logger'] = {
+    error: (details) => logged.push(details),
+    warn: (details, message) => warned.push({ ...details, message }),
+  }
   const commitSchemas = makeCommitSchemas({
     gitHost,
-    toolkit: new StubSchemaToolkit(),
+    toolkit: options.repositories?.toolkit ?? new StubSchemaToolkit(),
     schemaCache: new InMemorySchemaCache(),
     readBlobs: makeBlobReader({ gitHost, blobCache: new InMemoryBlobCache() }),
   })
+  const repoFormats = new InMemoryRepoFormats()
+  const formatSync = makeRepoFormatSync({
+    formats: repoFormats,
+    gitHost,
+    settings,
+    commitSchemas,
+    logger,
+    now,
+  })
   const deps: CommonDeps = {
     repoAccess,
-    repoList: makeRepoList({
-      repoAccess,
-      favorites,
-      visits,
-      formats: { known: async () => new Map() },
-      now,
-    }),
+    repoList: makeRepoList({ repoAccess, favorites, visits, formats: formatSync, now, logger }),
     listBranches: makeListBranches({ gitHost }),
     getBranchSchema:
-      options.getBranchSchema ?? makeGetBranchSchema({ gitHost, settings, commitSchemas }),
+      options.getBranchSchema ??
+      makeGetBranchSchema({
+        gitHost,
+        settings,
+        commitSchemas,
+        onDefaultBranchDetected: formatSync.record,
+      }),
     compareBranchSchemas: makeCompareBranchSchemas({ gitHost, settings, commitSchemas }),
     getLayout: makeGetLayout({ layouts }),
     saveTablePositions: makeSaveTablePositions({ layouts }),
-    repoSettings: makeRepoSettings({ settings }),
+    repoSettings: makeRepoSettings({ settings, onSourcesSaved: formatSync.markStale }),
     tableGroups: makeTableGroups({ groups: tableGroups }),
     admin: makeAdmin({ config, users, directory, sessions, now }),
-    logger: {
-      error: (details) => logged.push(details),
-      warn: (details, message) => warned.push({ ...details, message }),
-    },
+    logger,
     version: 'test',
     checkDatabase: options.checkDatabase ?? (() => {}),
     webDistPath: options.webDistPath ?? null,
   }
-  return { deps, directory, logged, warned, settings, tableGroups, favorites, visits }
+  return {
+    deps,
+    directory,
+    logged,
+    warned,
+    settings,
+    tableGroups,
+    favorites,
+    visits,
+    repoFormats,
+    formatSync,
+  }
 }
 
 export function buildFakeModeApp(options: Options = {}) {
   const users = new InMemoryUserRepository()
   users.users.set('fake-user', { id: 'fake-user', login: 'dev', avatarUrl: null, isAdmin: true })
-  const { deps, directory, logged, warned, settings, tableGroups, favorites, visits } = common(
+  const { deps, ...world } = common(
     new InMemoryInstanceConfig(),
     users,
     new InMemorySessionRepository(),
@@ -137,7 +173,7 @@ export function buildFakeModeApp(options: Options = {}) {
     mode: 'fake',
     fakeUser: { id: 'fake-user', login: 'dev', avatarUrl: null, isAdmin: true },
   })
-  return { app, directory, logged, warned, settings, tableGroups, favorites, visits, users }
+  return { app, ...world, users }
 }
 
 /** Real mode with in-memory stores. `ready: false` starts from a fresh, unconfigured instance. */
@@ -153,13 +189,7 @@ export function buildRealModeApp(options: Options & { ready?: boolean } = {}) {
     config.config = { ...config.config, publicUrl: 'https://erd.example.com', app: FAKE_APP }
     users.users.set('admin', { id: 'admin', login: 'admin', avatarUrl: null, isAdmin: true })
   }
-  const { deps, directory, logged, warned, settings, tableGroups, favorites, visits } = common(
-    config,
-    users,
-    sessions,
-    now,
-    options,
-  )
+  const { deps, ...world } = common(config, users, sessions, now, options)
   const registrar = new FakeAppRegistrar()
   const setup = makeSetup({ config, users, tokens, registrar, now })
   const auth = makeAuth({ config, users, sessions, identity, tokens, now })
@@ -201,20 +231,14 @@ export function buildRealModeApp(options: Options & { ready?: boolean } = {}) {
 
   return {
     app,
+    ...world,
     config,
     users,
     sessions,
     tokens,
     identity,
     registrar,
-    directory,
-    settings,
-    tableGroups,
-    favorites,
-    visits,
     setup,
-    logged,
-    warned,
     signIn,
     /** How many times the GitHub adapters were told to forget the previous App. */
     forgotten: () => forgotten,

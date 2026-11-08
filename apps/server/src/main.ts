@@ -6,6 +6,7 @@ import type { GitHost } from './application/ports/git-host.js'
 import type { RepoDirectory } from './application/ports/repo-directory.js'
 import { makeBlobReader } from './application/services/blob-reader.js'
 import { makeCommitSchemas } from './application/services/commit-schemas.js'
+import { makeRepoFormatSync } from './application/services/repo-format-sync.js'
 import { makeAdmin } from './application/use-cases/admin.js'
 import { makeAuth, makeUserAccessToken } from './application/use-cases/auth.js'
 import { makeCompareBranchSchemas } from './application/use-cases/compare-branch-schemas.js'
@@ -40,6 +41,7 @@ import { SqliteFavoriteRepository } from './infrastructure/persistence/sqlite-fa
 import { SqliteInstanceConfigRepository } from './infrastructure/persistence/sqlite-instance-config-repository.js'
 import { SqliteLayoutRepository } from './infrastructure/persistence/sqlite-layout-repository.js'
 import { SqliteLegacyRepoKeys } from './infrastructure/persistence/sqlite-legacy-repo-keys.js'
+import { SqliteRepoFormatRepository } from './infrastructure/persistence/sqlite-repo-format-repository.js'
 import { SqliteRepoSettingsRepository } from './infrastructure/persistence/sqlite-repo-settings-repository.js'
 import { SqliteSchemaCache } from './infrastructure/persistence/sqlite-schema-cache.js'
 import { SqliteSessionRepository } from './infrastructure/persistence/sqlite-session-repository.js'
@@ -86,6 +88,7 @@ async function main() {
   const tableGroups = new SqliteTableGroupRepository(db)
   const favorites = new SqliteFavoriteRepository(db)
   const visits = new SqliteVisitRepository(db)
+  const repoFormats = new SqliteRepoFormatRepository(db)
   // Rows saved by repository name before plan 6d move to the repository's id on access.
   const legacyKeys = new SqliteLegacyRepoKeys(db)
   const schemaCache = new SqliteSchemaCache(db)
@@ -114,6 +117,15 @@ async function main() {
       schemaCache,
       readBlobs: makeBlobReader({ gitHost, blobCache }),
     })
+    // One per mode: the background format checks share the parses and the detection cache.
+    const formatSync = makeRepoFormatSync({
+      formats: repoFormats,
+      gitHost,
+      settings: repoSettings,
+      commitSchemas,
+      logger,
+      now,
+    })
     const repoAccess = makeRepoAccess({
       directory,
       config: instanceConfig,
@@ -122,16 +134,14 @@ async function main() {
     })
     return {
       repoAccess,
-      repoList: makeRepoList({
-        repoAccess,
-        favorites,
-        visits,
-        // Replaced by the background format detection (plan 8, task 5).
-        formats: { known: async () => new Map() },
-        now,
-      }),
+      repoList: makeRepoList({ repoAccess, favorites, visits, formats: formatSync, now, logger }),
       listBranches: makeListBranches({ gitHost }),
-      getBranchSchema: makeGetBranchSchema({ gitHost, settings: repoSettings, commitSchemas }),
+      getBranchSchema: makeGetBranchSchema({
+        gitHost,
+        settings: repoSettings,
+        commitSchemas,
+        onDefaultBranchDetected: formatSync.record,
+      }),
       compareBranchSchemas: makeCompareBranchSchemas({
         gitHost,
         settings: repoSettings,
@@ -139,7 +149,10 @@ async function main() {
       }),
       getLayout: makeGetLayout({ layouts }),
       saveTablePositions: makeSaveTablePositions({ layouts }),
-      repoSettings: makeRepoSettings({ settings: repoSettings }),
+      repoSettings: makeRepoSettings({
+        settings: repoSettings,
+        onSourcesSaved: formatSync.markStale,
+      }),
       tableGroups: makeTableGroups({ groups: tableGroups }),
       admin: makeAdmin({ config: instanceConfig, users, directory, sessions, now }),
       logger,
