@@ -105,7 +105,7 @@ describe('useFavoriteToggle with two quick toggles', () => {
 
     act(() => toggle?.mutate({ repo: target, favorite: true }))
     act(() => toggle?.mutate({ repo: target, favorite: false }))
-    await waitFor(() => expect(releases).toHaveLength(2))
+    await waitFor(() => expect(releases).toHaveLength(1))
     expect(favoriteOf(client, 'shop')).toBe(false)
 
     // The first (add) is refused; the second (remove) succeeds: the server has no favourite.
@@ -124,17 +124,56 @@ describe('useFavoriteToggle with two quick toggles', () => {
     await screen.findByText('At most 100 favourites.')
     expect(lists).toBe(1)
     expect(favoriteOf(client, 'shop')).toBe(false)
+    await waitFor(() => expect(releases).toHaveLength(2))
     releases[1]?.(new Response(null, { status: 204 }))
     await waitFor(() => expect(lists).toBe(2))
     expect(favoriteOf(client, 'shop')).toBe(false)
   })
 })
 
+describe('useFavoriteToggle sends the toggles one after another', () => {
+  it('starts the second request once the first is answered, so the last click wins', async () => {
+    const releases: ((response: Response) => void)[] = []
+    const sent: string[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_path: string, init?: RequestInit) => {
+        if (init?.method === 'PUT' || init?.method === 'DELETE') {
+          sent.push(init.method)
+          return new Promise<Response>((resolve) => releases.push(resolve))
+        }
+        return Response.json({ repos: [repo('shop')] })
+      }),
+    )
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    let toggle: ReturnType<typeof useFavoriteToggle> | undefined
+    renderWithApp(<Harness onReady={(value) => (toggle = value)} />, client)
+    await waitFor(() => expect(favoriteOf(client, 'shop')).toBe(false))
+    const target = { owner: 'acme', name: 'shop' }
+
+    act(() => toggle?.mutate({ repo: target, favorite: true }))
+    act(() => toggle?.mutate({ repo: target, favorite: false }))
+    await waitFor(() => expect(sent).toEqual(['PUT']))
+    // Both clicks show at once; the second request waits for the first answer.
+    expect(favoriteOf(client, 'shop')).toBe(false)
+    await act(() => new Promise((resolve) => setTimeout(resolve, 20)))
+    expect(sent).toEqual(['PUT'])
+
+    releases[0]?.(new Response(null, { status: 204 }))
+    await waitFor(() => expect(sent).toEqual(['PUT', 'DELETE']))
+    releases[1]?.(new Response(null, { status: 204 }))
+    await waitFor(() => expect(client.isMutating()).toBe(0))
+    expect(favoriteOf(client, 'shop')).toBe(false)
+  })
+})
+
 describe('useRepoFormatPolling', () => {
-  function setup(fetchMock: ReturnType<typeof vi.fn>) {
+  function setup(fetchMock: ReturnType<typeof vi.fn>, { structuralSharing = true } = {}) {
     vi.stubGlobal('fetch', fetchMock)
     const client = new QueryClient({
-      defaultOptions: { queries: { retry: false, staleTime: Number.POSITIVE_INFINITY } },
+      defaultOptions: {
+        queries: { retry: false, staleTime: Number.POSITIVE_INFINITY, structuralSharing },
+      },
     })
     client.setQueryData<RepoListResponse>(['repos'], {
       repos: [repo('shop', { formatPending: true }), repo('blog')],
@@ -180,6 +219,44 @@ describe('useRepoFormatPolling', () => {
     })
     await act(() => vi.advanceTimersByTimeAsync(30_000))
     expect(formatCalls(fetchMock)).toBe(1)
+  })
+
+  it('replaces only the repositories whose format changed', async () => {
+    vi.useFakeTimers()
+    const fetchMock = vi.fn(async () =>
+      Response.json({
+        formats: [
+          { owner: 'acme', name: 'shop', format: null, formatPending: true },
+          { owner: 'acme', name: 'blog', format: null, formatPending: false },
+        ],
+      }),
+    )
+    // The merge itself keeps the identities, whatever the query client's structural sharing.
+    const { result } = setup(fetchMock, { structuralSharing: false })
+    const before = result.current
+    await act(() => vi.advanceTimersByTimeAsync(3100))
+    expect(formatCalls(fetchMock)).toBe(1)
+    // Nothing changed: the same objects, so their rows do not render again.
+    expect(result.current?.[0]).toBe(before?.[0])
+    expect(result.current?.[1]).toBe(before?.[1])
+
+    fetchMock.mockImplementation(async () =>
+      Response.json({
+        formats: [
+          {
+            owner: 'acme',
+            name: 'shop',
+            format: { kind: 'prisma', checkedAt: '2026-01-01T00:00:00Z' },
+            formatPending: false,
+          },
+          { owner: 'acme', name: 'blog', format: null, formatPending: false },
+        ],
+      }),
+    )
+    await act(() => vi.advanceTimersByTimeAsync(3000))
+    expect(result.current?.[0]).not.toBe(before?.[0])
+    expect(result.current?.[0]?.format?.kind).toBe('prisma')
+    expect(result.current?.[1]).toBe(before?.[1])
   })
 
   it('gives up after 60 s while repositories stay pending', async () => {

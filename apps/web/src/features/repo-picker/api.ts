@@ -39,6 +39,8 @@ export function useFavoriteToggle() {
   const client = useQueryClient()
   return useMutation({
     mutationKey: ['favorite'],
+    // One request at a time, in click order: the star ends on the user's last click.
+    scope: { id: 'favorite' },
     mutationFn: ({
       repo,
       favorite,
@@ -79,6 +81,11 @@ export function useFavoriteToggle() {
   })
 }
 
+const formatChanged = (repo: RepoDto, polled: RepoFormatsResponse['formats'][number]) =>
+  repo.formatPending !== polled.formatPending ||
+  repo.format?.kind !== polled.format?.kind ||
+  repo.format?.checkedAt !== polled.format?.checkedAt
+
 /** Polls the detected formats while some repository is pending, for at most a minute. */
 export function useRepoFormatPolling(repos: readonly RepoDto[] | undefined) {
   const client = useQueryClient()
@@ -93,11 +100,16 @@ export function useRepoFormatPolling(repos: readonly RepoDto[] | undefined) {
         apiGet<RepoFormatsResponse>(apiPaths.repoFormats)
           .then(({ formats }) => {
             const byKey = new Map(formats.map((f) => [`${f.owner}/${f.name}`, f]))
+            const polled = (r: RepoDto) => byKey.get(`${r.owner}/${r.name}`)
+            // Only the changed repositories are replaced: the others keep their rows unrendered.
             patchRepos(
               client,
-              (r) => byKey.has(`${r.owner}/${r.name}`),
               (r) => {
-                const found = byKey.get(`${r.owner}/${r.name}`)
+                const found = polled(r)
+                return found !== undefined && formatChanged(r, found)
+              },
+              (r) => {
+                const found = polled(r)
                 return found
                   ? { ...r, format: found.format, formatPending: found.formatPending }
                   : r
