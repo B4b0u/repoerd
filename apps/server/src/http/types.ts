@@ -18,6 +18,8 @@ export interface AppLogger {
   error(details: object, message: string): void
   /** Routine trouble (GitHub unavailable or rate-limited): one line, no stack. */
   warn(details: object, message: string): void
+  /** Expected, harmless conditions worth one line (a truncated tree). */
+  info(details: object, message: string): void
 }
 
 export interface CommonDeps {
