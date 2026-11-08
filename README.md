@@ -126,6 +126,8 @@ The whole state is the SQLite file in `/data` (the `repoerd-data` volume). It ho
 - the users (GitHub id, login, avatar URL, administrator flag, last activity) and their sessions (only a hash of each session token);
 - the GitHub App credentials and each user's GitHub tokens, **encrypted** with `SECRET_KEY` (AES-256-GCM);
 - the layouts and the manual sources of each repository;
+- each user's favourite repositories and last 20 visits;
+- each repository's detected schema format, with the date of its check;
 - caches: the contents of the schema files people open, the detected sources and the parsed schemas. Cached data older than **30 days** is deleted at start-up and every day.
 
 Sessions last 30 days from the last visit, and 90 days at most after the sign-in. The code of the repositories is never executed: schema files are parsed in separate processes, with size and nesting limits. RepoERD sends no data anywhere but to GitHub.
@@ -181,7 +183,7 @@ While you can still sign in, the App can also be replaced from `/admin` ("Replac
 
 - GitHub.com only: GitHub Enterprise Server is not supported.
 - PostgreSQL only. A Drizzle config with another `dialect` is reported as unsupported.
-- One server instance: rate limits, the parsing queue and the repository visibility caches live in memory.
+- One server instance: rate limits, the parsing queue, the repository visibility caches and the background queue that detects each repository's schema format live in memory. That queue reads GitHub with the installation token, at most 2 repositories at a time and 200 per hour, and checks a repository again only after a push.
 - Image size is about 460 MB (the parser ships native binaries).
 
 **Parsing**

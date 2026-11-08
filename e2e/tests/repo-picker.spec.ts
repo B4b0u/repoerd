@@ -8,8 +8,8 @@ const section = (page: Page, name: string) => page.getByRole('region', { name, e
 test('a starred repository moves to the favourites, also after a reload', async ({ page }) => {
   await page.goto('/')
   const all = section(page, 'All repositories')
-  await all.getByRole('button', { name: 'Add acme/blog-drizzle to favourites' }).click()
   try {
+    await all.getByRole('button', { name: 'Add acme/blog-drizzle to favourites' }).click()
     const favourites = section(page, 'Favourites')
     await expect(
       favourites.getByRole('link', { name: 'acme/blog-drizzle', exact: true }),
@@ -19,12 +19,16 @@ test('a starred repository moves to the favourites, also after a reload', async 
       favourites.getByRole('link', { name: 'acme/blog-drizzle', exact: true }),
     ).toBeVisible()
   } finally {
-    // Back to the initial state for the specs that follow.
+    // Back to the initial state for the specs that follow; nothing to undo if the star failed.
     await page.goto('/')
-    await section(page, 'Favourites')
-      .getByRole('button', { name: 'Remove acme/blog-drizzle from favourites' })
-      .click()
-    await expect(section(page, 'Favourites')).toHaveCount(0)
+    await expect(all).toBeVisible()
+    const unstar = section(page, 'Favourites').getByRole('button', {
+      name: 'Remove acme/blog-drizzle from favourites',
+    })
+    if ((await unstar.count()) > 0) {
+      await unstar.click()
+      await expect(section(page, 'Favourites')).toHaveCount(0)
+    }
   }
 })
 
@@ -71,6 +75,9 @@ test('repositories without a schema are hidden by default and shown on request',
 })
 
 test('a search narrows the list and hides the favourites and recents', async ({ page }) => {
+  // A diagram opened by this test: the recents are shown before the search.
+  await page.goto('/acme/shop-prisma')
+  await expect(page.locator('.react-flow__node').first()).toBeVisible()
   await page.goto('/')
   await expect(section(page, 'Recent')).toBeVisible()
   await page.getByRole('searchbox', { name: 'Filter repositories' }).fill('storefront')
