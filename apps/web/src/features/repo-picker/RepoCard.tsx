@@ -1,6 +1,6 @@
 import type { RepoDto } from '@repoerd/contracts'
 import { GitBranch, History, Lock } from 'lucide-react'
-import { useId } from 'react'
+import { memo, useId } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'wouter'
 import { toLanguage } from '../../shared/i18n/i18n'
@@ -37,7 +37,7 @@ export function DefaultBranch({ name, className }: { name: string; className?: s
  * A repository as a card: the whole card links to its diagram, the star sits beside the link.
  * `opened` adds when its diagram was last opened (the recents).
  */
-export function RepoCard({
+export const RepoCard = memo(function RepoCard({
   repo,
   opened = false,
   onToggleFavorite,
@@ -89,4 +89,4 @@ export function RepoCard({
       />
     </li>
   )
-}
+})

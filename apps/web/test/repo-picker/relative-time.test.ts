@@ -19,6 +19,11 @@ describe('formatRelative', () => {
     expect(formatRelative(ago(70 * 86400), now, 'en')).toBe('2 months ago')
   })
 
+  it('says "now" for a date ahead of the browser clock', () => {
+    expect(formatRelative(ago(-120), now, 'en')).toBe('now')
+    expect(formatRelative(ago(-2 * 86400), now, 'fr')).toBe('maintenant')
+  })
+
   it('speaks French, with "hier" for yesterday', () => {
     expect(formatRelative(ago(86400), now, 'fr')).toBe('hier')
   })

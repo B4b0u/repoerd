@@ -1,5 +1,5 @@
 import type { RepoDto } from '@repoerd/contracts'
-import { useId } from 'react'
+import { memo, useId } from 'react'
 import { Link } from 'wouter'
 import { FavoriteButton } from './FavoriteButton'
 import { FormatBadge } from './FormatBadge'
@@ -13,7 +13,7 @@ export const rowStarId = (repo: Pick<RepoDto, 'owner' | 'name'>) =>
  * A repository in the full list: the star, then a link to its diagram over the rest of the row.
  * `showOwner` when no owner heading above says whose it is.
  */
-export function RepoRow({
+export const RepoRow = memo(function RepoRow({
   repo,
   showOwner,
   onToggleFavorite,
@@ -49,4 +49,4 @@ export function RepoRow({
       </Link>
     </li>
   )
-}
+})
