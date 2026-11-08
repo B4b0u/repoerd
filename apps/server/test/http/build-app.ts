@@ -10,6 +10,7 @@ import { makeGetLayout, makeSaveTablePositions } from '../../src/application/use
 import { makeListBranches } from '../../src/application/use-cases/list-branches.js'
 import { makeReplaceApp } from '../../src/application/use-cases/replace-app.js'
 import { makeRepoAccess } from '../../src/application/use-cases/repo-access.js'
+import { makeRepoList } from '../../src/application/use-cases/repo-list.js'
 import { makeRepoSettings } from '../../src/application/use-cases/repo-settings.js'
 import { makeSetup } from '../../src/application/use-cases/setup.js'
 import { makeTableGroups } from '../../src/application/use-cases/table-groups.js'
@@ -26,6 +27,7 @@ import { InMemoryGitHost } from '../fakes/in-memory-git-host.js'
 import { accessible, InMemoryRepoDirectory } from '../fakes/in-memory-repo-directory.js'
 import {
   InMemoryBlobCache,
+  InMemoryFavorites,
   InMemoryInstanceConfig,
   InMemoryLayoutRepository,
   InMemoryRepoSettings,
@@ -33,6 +35,7 @@ import {
   InMemorySessionRepository,
   InMemoryTableGroups,
   InMemoryUserRepository,
+  InMemoryVisits,
 } from '../fakes/in-memory-stores.js'
 import { StubSchemaToolkit } from '../fakes/stub-schema-toolkit.js'
 
@@ -79,6 +82,9 @@ function common(
   const layouts = new InMemoryLayoutRepository()
   const settings = new InMemoryRepoSettings()
   const tableGroups = new InMemoryTableGroups()
+  const favorites = new InMemoryFavorites()
+  const visits = new InMemoryVisits()
+  const repoAccess = makeRepoAccess({ directory, config })
   const logged: object[] = []
   const warned: object[] = []
   const commitSchemas = makeCommitSchemas({
@@ -88,7 +94,14 @@ function common(
     readBlobs: makeBlobReader({ gitHost, blobCache: new InMemoryBlobCache() }),
   })
   const deps: CommonDeps = {
-    repoAccess: makeRepoAccess({ directory, config }),
+    repoAccess,
+    repoList: makeRepoList({
+      repoAccess,
+      favorites,
+      visits,
+      formats: { known: async () => new Map() },
+      now,
+    }),
     listBranches: makeListBranches({ gitHost }),
     getBranchSchema:
       options.getBranchSchema ?? makeGetBranchSchema({ gitHost, settings, commitSchemas }),
@@ -106,13 +119,13 @@ function common(
     checkDatabase: options.checkDatabase ?? (() => {}),
     webDistPath: options.webDistPath ?? null,
   }
-  return { deps, directory, logged, warned, settings, tableGroups }
+  return { deps, directory, logged, warned, settings, tableGroups, favorites, visits }
 }
 
 export function buildFakeModeApp(options: Options = {}) {
   const users = new InMemoryUserRepository()
   users.users.set('fake-user', { id: 'fake-user', login: 'dev', avatarUrl: null, isAdmin: true })
-  const { deps, directory, logged, warned, settings, tableGroups } = common(
+  const { deps, directory, logged, warned, settings, tableGroups, favorites, visits } = common(
     new InMemoryInstanceConfig(),
     users,
     new InMemorySessionRepository(),
@@ -124,7 +137,7 @@ export function buildFakeModeApp(options: Options = {}) {
     mode: 'fake',
     fakeUser: { id: 'fake-user', login: 'dev', avatarUrl: null, isAdmin: true },
   })
-  return { app, directory, logged, warned, settings, tableGroups, users }
+  return { app, directory, logged, warned, settings, tableGroups, favorites, visits, users }
 }
 
 /** Real mode with in-memory stores. `ready: false` starts from a fresh, unconfigured instance. */
@@ -140,7 +153,7 @@ export function buildRealModeApp(options: Options & { ready?: boolean } = {}) {
     config.config = { ...config.config, publicUrl: 'https://erd.example.com', app: FAKE_APP }
     users.users.set('admin', { id: 'admin', login: 'admin', avatarUrl: null, isAdmin: true })
   }
-  const { deps, directory, logged, warned, settings, tableGroups } = common(
+  const { deps, directory, logged, warned, settings, tableGroups, favorites, visits } = common(
     config,
     users,
     sessions,
@@ -197,6 +210,8 @@ export function buildRealModeApp(options: Options & { ready?: boolean } = {}) {
     directory,
     settings,
     tableGroups,
+    favorites,
+    visits,
     setup,
     logged,
     warned,

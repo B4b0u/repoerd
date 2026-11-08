@@ -110,21 +110,35 @@ export function registerRepoRoutes(app: AppHono, deps: AppDeps) {
   }
 
   app.get('/api/repos', async (c) => {
-    const result = await deps.repoAccess.listRepositories(c.get('user').id, {
+    const result = await deps.repoList.list(c.get('user').id, {
       refresh: c.req.query('refresh') === '1',
     })
     if (!result.ok) return accessError(c, result.error)
-    // Favourites, visits and detected formats arrive with the repo picker's server tasks.
-    const repos = result.value.map((repo) => ({
-      ...repo,
-      favorite: false,
-      lastOpenedAt: null,
-      ownerAvatarUrl: null,
-      format: null,
-      formatPending: false,
-    }))
-    return c.json({ repos } satisfies RepoListResponse)
+    return c.json({ repos: result.value } satisfies RepoListResponse)
   })
+
+  const setFavorite = (on: boolean) => async (c: AppContext) => {
+    const repo = await authorized(c)
+    if (repo instanceof Response) return repo
+    const result = await deps.repoList.setFavorite(c.get('user').id, repo, on)
+    if (!result.ok)
+      return apiError(c, 409, 'conflict', `At most ${result.error.max} favourite repositories`, {
+        reason: 'too-many-favorites',
+        max: result.error.max,
+      })
+    return c.body(null, 204)
+  }
+  app.put('/api/repos/:owner/:repo/favorite', setFavorite(true))
+  app.delete('/api/repos/:owner/:repo/favorite', setFavorite(false))
+
+  /** A visit is a convenience: failing to save it never fails the response it follows. */
+  async function rememberVisit(c: AppContext, repo: KnownRepo): Promise<void> {
+    try {
+      await deps.repoList.recordVisit(c.get('user').id, repo)
+    } catch (error) {
+      deps.logger.warn({ err: error }, 'Could not remember a repository visit')
+    }
+  }
 
   app.get('/api/repos/:owner/:repo/branches', async (c) => {
     const repo = await authorized(c)
@@ -153,6 +167,7 @@ export function registerRepoRoutes(app: AppHono, deps: AppDeps) {
             branch: result.error.branch,
           })
     }
+    await rememberVisit(c, repo)
     const view = result.value
     return c.json({
       repo: { owner: view.repo.owner, name: view.repo.name },
@@ -206,6 +221,7 @@ export function registerRepoRoutes(app: AppHono, deps: AppDeps) {
           return apiError(c, 409, 'no_common_history', 'The branches have no common ancestor')
       }
     }
+    await rememberVisit(c, repo)
     const view = result.value
     const url = (sha: string) => (deps.mode === 'real' ? commitUrl(view.repo, sha) : null)
     const side = (compared: CompareSide): CompareSideDto => ({

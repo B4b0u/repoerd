@@ -14,6 +14,7 @@ import { makeGetLayout, makeSaveTablePositions } from './application/use-cases/l
 import { makeListBranches } from './application/use-cases/list-branches.js'
 import { makeReplaceApp } from './application/use-cases/replace-app.js'
 import { makeRepoAccess } from './application/use-cases/repo-access.js'
+import { makeRepoList } from './application/use-cases/repo-list.js'
 import { makeRepoSettings } from './application/use-cases/repo-settings.js'
 import { makeSetup } from './application/use-cases/setup.js'
 import { makeTableGroups } from './application/use-cases/table-groups.js'
@@ -35,6 +36,7 @@ import { InstallationTokens } from './infrastructure/github/installation-tokens.
 import { purgeCaches } from './infrastructure/persistence/cache-retention.js'
 import { openDatabase, pingDatabase } from './infrastructure/persistence/database.js'
 import { SqliteBlobCache } from './infrastructure/persistence/sqlite-blob-cache.js'
+import { SqliteFavoriteRepository } from './infrastructure/persistence/sqlite-favorite-repository.js'
 import { SqliteInstanceConfigRepository } from './infrastructure/persistence/sqlite-instance-config-repository.js'
 import { SqliteLayoutRepository } from './infrastructure/persistence/sqlite-layout-repository.js'
 import { SqliteLegacyRepoKeys } from './infrastructure/persistence/sqlite-legacy-repo-keys.js'
@@ -43,6 +45,7 @@ import { SqliteSchemaCache } from './infrastructure/persistence/sqlite-schema-ca
 import { SqliteSessionRepository } from './infrastructure/persistence/sqlite-session-repository.js'
 import { SqliteTableGroupRepository } from './infrastructure/persistence/sqlite-table-group-repository.js'
 import { SqliteUserRepository } from './infrastructure/persistence/sqlite-user-repository.js'
+import { SqliteVisitRepository } from './infrastructure/persistence/sqlite-visit-repository.js'
 import { schemaCoreToolkit } from './infrastructure/schema/schema-core-toolkit.js'
 import { makeShutdown } from './shutdown.js'
 import {
@@ -81,6 +84,8 @@ async function main() {
   const layouts = new SqliteLayoutRepository(db)
   const repoSettings = new SqliteRepoSettingsRepository(db)
   const tableGroups = new SqliteTableGroupRepository(db)
+  const favorites = new SqliteFavoriteRepository(db)
+  const visits = new SqliteVisitRepository(db)
   // Rows saved by repository name before plan 6d move to the repository's id on access.
   const legacyKeys = new SqliteLegacyRepoKeys(db)
   const schemaCache = new SqliteSchemaCache(db)
@@ -109,12 +114,21 @@ async function main() {
       schemaCache,
       readBlobs: makeBlobReader({ gitHost, blobCache }),
     })
+    const repoAccess = makeRepoAccess({
+      directory,
+      config: instanceConfig,
+      enforceAllowedOrgs,
+      legacyKeys,
+    })
     return {
-      repoAccess: makeRepoAccess({
-        directory,
-        config: instanceConfig,
-        enforceAllowedOrgs,
-        legacyKeys,
+      repoAccess,
+      repoList: makeRepoList({
+        repoAccess,
+        favorites,
+        visits,
+        // Replaced by the background format detection (plan 8, task 5).
+        formats: { known: async () => new Map() },
+        now,
       }),
       listBranches: makeListBranches({ gitHost }),
       getBranchSchema: makeGetBranchSchema({ gitHost, settings: repoSettings, commitSchemas }),

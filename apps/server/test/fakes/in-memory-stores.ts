@@ -18,6 +18,11 @@ import type {
   LayoutRepository,
   LayoutScope,
 } from '../../src/application/ports/layout-repository.js'
+import {
+  type FavoriteRepository,
+  MAX_FAVORITES,
+  type VisitRepository,
+} from '../../src/application/ports/repo-picker.js'
 import type { RepoSettingsRepository } from '../../src/application/ports/repo-settings.js'
 import type { SchemaCache } from '../../src/application/ports/schema-cache.js'
 import type {
@@ -343,5 +348,42 @@ export class InMemorySessionRepository implements SessionRepository {
       counts.set(session.userId, (counts.get(session.userId) ?? 0) + 1)
     }
     return counts
+  }
+}
+
+export class InMemoryFavorites implements FavoriteRepository {
+  readonly byUser = new Map<string, Set<string>>()
+
+  async list(userId: string) {
+    return new Set(this.byUser.get(userId) ?? [])
+  }
+  async add(userId: string, repo: KnownRepo, _now: Date) {
+    const keys = this.byUser.get(userId) ?? new Set<string>()
+    if (!keys.has(repoKey(repo)) && keys.size >= MAX_FAVORITES) return 'limit' as const
+    keys.add(repoKey(repo))
+    this.byUser.set(userId, keys)
+    return 'added' as const
+  }
+  async remove(userId: string, repo: KnownRepo) {
+    this.byUser.get(userId)?.delete(repoKey(repo))
+  }
+}
+
+export class InMemoryVisits implements VisitRepository {
+  readonly byUser = new Map<string, Map<string, Date>>()
+  /** Makes the next `record` fail (the route must still answer). */
+  failNext = false
+
+  async record(userId: string, repo: KnownRepo, at: Date) {
+    if (this.failNext) {
+      this.failNext = false
+      throw new Error('disk full')
+    }
+    const visits = this.byUser.get(userId) ?? new Map<string, Date>()
+    visits.set(repoKey(repo), at)
+    this.byUser.set(userId, visits)
+  }
+  async list(userId: string) {
+    return new Map(this.byUser.get(userId) ?? [])
   }
 }

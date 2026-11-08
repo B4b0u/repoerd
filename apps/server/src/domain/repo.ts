@@ -11,3 +11,6 @@ export interface KnownRepo extends RepoRef {
 
 /** Lower-case `owner/name`: name matching, and the key of the rows saved before plan 6d. */
 export const fullName = (repo: RepoRef) => `${repo.owner}/${repo.name}`.toLowerCase()
+
+/** A repository's rows are keyed by its GitHub id (spec §6.3): a rename or a transfer keeps them. */
+export const repoKey = (repo: { id: number }) => String(repo.id)
