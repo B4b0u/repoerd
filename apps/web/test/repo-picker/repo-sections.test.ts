@@ -109,4 +109,14 @@ describe('buildRepoSections', () => {
     expect(owners[0]?.repos.map((r) => r.name)).toEqual(['a', 'z'])
     expect(owners[1]?.avatarUrl).toBe('https://a/z.png')
   })
+
+  it('orders owners and favourites by owner when one login prefixes another', () => {
+    const repos = [
+      repo('acme-labs', 'x', { favorite: true }),
+      repo('acme', 'x', { favorite: true }),
+    ]
+    const sections = buildRepoSections(repos, all)
+    expect(sections.owners.map((group) => group.owner)).toEqual(['acme', 'acme-labs'])
+    expect(sections.favorites.map((r) => r.owner)).toEqual(['acme', 'acme-labs'])
+  })
 })

@@ -55,14 +55,18 @@ export function useFavoriteToggle() {
       )
     },
     onError: (error, { repo, favorite }) => {
-      patchRepos(
-        client,
-        (r) => r.owner === repo.owner && r.name === repo.name,
-        (r) => ({ ...r, favorite: !favorite }),
-      )
+      // With another toggle in flight the final invalidation settles the star.
+      if (client.isMutating({ mutationKey: ['favorite'] }) <= 1)
+        patchRepos(
+          client,
+          (r) => r.owner === repo.owner && r.name === repo.name,
+          (r) => ({ ...r, favorite: !favorite }),
+        )
       const max = error instanceof ApiError ? error.details.max : undefined
       toast.error(
-        error instanceof ApiError && error.code === 'too-many-favorites' && max !== undefined
+        error instanceof ApiError &&
+          error.details.reason === 'too-many-favorites' &&
+          max !== undefined
           ? t('tooManyFavorites', { max })
           : t('favoriteFailed'),
       )

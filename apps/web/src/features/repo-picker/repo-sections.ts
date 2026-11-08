@@ -15,11 +15,11 @@ export interface RepoSections {
 const RECENTS_LIMIT = 6
 
 const fullName = (repo: RepoDto) => `${repo.owner}/${repo.name}`.toLowerCase()
-const byName = (a: RepoDto, b: RepoDto) => {
-  const left = fullName(a)
-  const right = fullName(b)
-  return left < right ? -1 : left > right ? 1 : 0
-}
+const compare = (left: string, right: string) => (left < right ? -1 : left > right ? 1 : 0)
+// Owner first: comparing "owner/name" would put "acme-labs/x" before "acme/x".
+const byName = (a: RepoDto, b: RepoDto) =>
+  compare(a.owner.toLowerCase(), b.owner.toLowerCase()) ||
+  compare(a.name.toLowerCase(), b.name.toLowerCase())
 
 /** Splits the repositories into favourites, recent visits and owner groups. */
 export function buildRepoSections(

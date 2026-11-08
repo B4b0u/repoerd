@@ -68,12 +68,65 @@ describe('useFavoriteToggle', () => {
 
     release(
       Response.json(
-        { error: { code: 'too-many-favorites', message: 'x', details: { max: 100 } } },
+        {
+          error: {
+            code: 'conflict',
+            message: 'At most 100 favourite repositories',
+            details: { reason: 'too-many-favorites', max: 100 },
+          },
+        },
         { status: 409 },
       ),
     )
     await waitFor(() => expect(favoriteOf(client, 'shop')).toBe(false))
     expect(await screen.findByText('At most 100 favourites.')).toBeTruthy()
+  })
+})
+
+describe('useFavoriteToggle with two quick toggles', () => {
+  it('ends on the server state and refetches once, after the last toggle', async () => {
+    const releases: ((response: Response) => void)[] = []
+    const serverFavorite = false
+    let lists = 0
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_path: string, init?: RequestInit) => {
+        if (init?.method === 'PUT' || init?.method === 'DELETE')
+          return new Promise<Response>((resolve) => releases.push(resolve))
+        lists++
+        return Response.json({ repos: [repo('shop', { favorite: serverFavorite })] })
+      }),
+    )
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    let toggle: ReturnType<typeof useFavoriteToggle> | undefined
+    renderWithApp(<Harness onReady={(value) => (toggle = value)} />, client)
+    await waitFor(() => expect(lists).toBe(1))
+    const target = { owner: 'acme', name: 'shop' }
+
+    act(() => toggle?.mutate({ repo: target, favorite: true }))
+    act(() => toggle?.mutate({ repo: target, favorite: false }))
+    await waitFor(() => expect(releases).toHaveLength(2))
+    expect(favoriteOf(client, 'shop')).toBe(false)
+
+    // The first (add) is refused; the second (remove) succeeds: the server has no favourite.
+    releases[0]?.(
+      Response.json(
+        {
+          error: {
+            code: 'conflict',
+            message: 'x',
+            details: { reason: 'too-many-favorites', max: 100 },
+          },
+        },
+        { status: 409 },
+      ),
+    )
+    await screen.findByText('At most 100 favourites.')
+    expect(lists).toBe(1)
+    expect(favoriteOf(client, 'shop')).toBe(false)
+    releases[1]?.(new Response(null, { status: 204 }))
+    await waitFor(() => expect(lists).toBe(2))
+    expect(favoriteOf(client, 'shop')).toBe(false)
   })
 })
 
