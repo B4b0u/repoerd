@@ -137,7 +137,12 @@ export class GitHubGitHost implements GitHost {
     const ref = await this.withToken(
       repo,
       () => null,
-      (token) => this.deps.api.jsonOrNull({ path, token }, refSchema),
+      (token) =>
+        this.deps.api.jsonOrNull({ path, token }, refSchema).catch((error: unknown) => {
+          // 409 "Git Repository is empty": a repository without commits has no branch.
+          if (error instanceof GitHubHttpError && error.status === 409) return null
+          throw error
+        }),
     )
     return ref?.object.type === 'commit' ? ref.object.sha : null
   }

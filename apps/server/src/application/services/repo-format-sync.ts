@@ -147,6 +147,19 @@ export function makeRepoFormatSync(deps: RepoFormatSyncDeps): RepoFormatSync {
     )
   }
 
+  /**
+   * The default branch does not resolve. A repository without commits (empty on GitHub) has no
+   * branch at all: it has no schema, stored with no commit; its next push re-checks it. A
+   * repository the App cannot read, or whose default branch changed since the list, is a failure.
+   */
+  async function saveWithoutBranch(repo: AccessibleRepo, checkedAt: Date): Promise<void> {
+    const current = await deps.gitHost.getRepository(repo)
+    if (!current) throw new Error('Repository not found')
+    if (current.defaultBranch !== repo.defaultBranch)
+      throw new Error(`Default branch ${repo.defaultBranch} not found`)
+    await deps.formats.save(toKnown(repo), { format: 'none', commitSha: null, checkedAt })
+  }
+
   /** One repository: never throws, a failure is stored (retried after an hour) and logged. */
   async function check(repo: AccessibleRepo): Promise<void> {
     const target = toKnown(repo)
@@ -155,7 +168,10 @@ export function makeRepoFormatSync(deps: RepoFormatSyncDeps): RepoFormatSync {
     const checkedAt = deps.now()
     try {
       const commitSha = await deps.gitHost.resolveBranch(target, repo.defaultBranch)
-      if (!commitSha) throw new Error(`Default branch ${repo.defaultBranch} not found`)
+      if (!commitSha) {
+        await saveWithoutBranch(repo, checkedAt)
+        return
+      }
       const stored = (await deps.formats.getMany([key])).get(key)
       if (stored && !stored.stale && stored.commitSha === commitSha) {
         // The push touched another branch: the format cannot have changed.

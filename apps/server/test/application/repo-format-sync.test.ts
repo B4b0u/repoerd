@@ -90,13 +90,19 @@ function world(
     hourlyLimit?: number
     /** Repositories on the git host (default: every listed one). */
     onHost?: string[]
+    /** Repositories on the git host without any branch (empty on GitHub). */
+    empty?: string[]
     formats?: Record<string, RepoSchemaFormat>
     truncated?: boolean
   } = {},
 ) {
   let clock = NOW
   const repos = names.map((name) => accessible('acme', name))
-  const gitHost = new InMemoryGitHost((options.onHost ?? names).map(input))
+  const gitHost = new InMemoryGitHost(
+    (options.onHost ?? names).map((name) =>
+      options.empty?.includes(name) ? { ...input(name), branches: {} } : input(name),
+    ),
+  )
   const formats = new InMemoryRepoFormats()
   const settings = new InMemoryRepoSettings()
   const detections = {
@@ -311,6 +317,47 @@ describe('repository format sync', () => {
     expect(w.formats.rows.get(repoKey(w.byName('gone')))).toMatchObject({ failedAt: NOW })
     expect(w.detections.calls).toEqual(['b'])
     expect(w.warned).toHaveLength(1)
+  })
+
+  it('stores an empty repository as without schema, and never re-checks it', async () => {
+    const w = world(['empty', 'b'], { concurrency: 1, empty: ['empty'] })
+    await w.known()
+    await w.sync.idle()
+    expect(w.formats.rows.get(repoKey(w.byName('empty')))).toMatchObject({
+      format: 'none',
+      commitSha: null,
+      checkedAt: NOW,
+      failedAt: null,
+    })
+    expect(w.detections.calls).toEqual(['b'])
+    expect(w.warned).toEqual([])
+    w.advance(2 * HOUR)
+    expect((await w.known()).empty).toEqual({
+      format: { kind: 'none', checkedAt: NOW.toISOString() },
+      pending: false,
+    })
+    await w.sync.idle()
+    expect(w.detections.calls).toEqual(['b'])
+  })
+
+  it('a default branch renamed since the list is a failure, not an empty repository', async () => {
+    const w = world(['a'])
+    const listed = { ...w.byName('a'), defaultBranch: 'master' }
+    await w.sync.known([listed], new Set())
+    await w.sync.idle()
+    expect(w.formats.rows.get(repoKey(listed))).toMatchObject({ format: null, failedAt: NOW })
+    expect(w.warned).toHaveLength(1)
+  })
+
+  it('checks an empty repository again once it is pushed to', async () => {
+    const w = world(['a'])
+    const empty = { ...w.byName('a'), pushedAt: '2026-10-10T13:00:00Z' }
+    await w.formats.save(empty, { format: 'none', commitSha: null, checkedAt: NOW })
+    w.advance(2 * HOUR)
+    await w.sync.known([empty], new Set())
+    await w.sync.idle()
+    expect(w.detections.calls).toEqual(['a'])
+    expect(w.formats.rows.get(repoKey(empty))?.format).toBe('prisma')
   })
 
   it('does not store the format of a truncated tree', async () => {

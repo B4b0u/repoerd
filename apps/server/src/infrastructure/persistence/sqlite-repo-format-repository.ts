@@ -14,7 +14,7 @@ export class SqliteRepoFormatRepository implements RepoFormatRepository {
     for (const part of chunk(keys)) {
       const rows = this.db.select().from(repoFormats).where(inArray(repoFormats.repo, part)).all()
       for (const row of rows) {
-        if (row.format === null || row.commitSha === null) continue
+        if (row.format === null) continue
         found.set(row.repo, {
           format: row.format,
           commitSha: row.commitSha,
@@ -29,7 +29,7 @@ export class SqliteRepoFormatRepository implements RepoFormatRepository {
 
   async save(
     repo: KnownRepo,
-    value: { format: RepoSchemaFormat; commitSha: string; checkedAt: Date },
+    value: { format: RepoSchemaFormat; commitSha: string | null; checkedAt: Date },
   ): Promise<void> {
     const row = { ...value, failedAt: null, stale: false }
     this.db

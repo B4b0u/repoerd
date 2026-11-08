@@ -109,6 +109,18 @@ describe('SqliteRepoFormatRepository', () => {
     })
   })
 
+  it('stores the format of a repository without commits (no commit sha)', async () => {
+    const formats = new SqliteRepoFormatRepository(db)
+    await formats.save(repoOf(5), { format: 'none', commitSha: null, checkedAt: t(1) })
+    expect((await formats.getMany(['5'])).get('5')).toEqual({
+      format: 'none',
+      commitSha: null,
+      checkedAt: t(1),
+      failedAt: null,
+      stale: false,
+    })
+  })
+
   it('stores a failure for a never-detected repository', async () => {
     const formats = new SqliteRepoFormatRepository(db)
     await formats.markFailed(repoOf(3), t(4))

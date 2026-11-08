@@ -395,10 +395,7 @@ export class InMemoryVisits implements VisitRepository {
 export class InMemoryRepoFormats implements RepoFormatRepository {
   readonly rows = new Map<
     string,
-    Omit<StoredRepoFormat, 'format' | 'commitSha'> & {
-      format: RepoSchemaFormat | null
-      commitSha: string | null
-    }
+    Omit<StoredRepoFormat, 'format'> & { format: RepoSchemaFormat | null }
   >()
   /** Makes every call throw (a database error). */
   broken = false
@@ -412,14 +409,13 @@ export class InMemoryRepoFormats implements RepoFormatRepository {
     const found = new Map<string, StoredRepoFormat>()
     for (const key of keys) {
       const row = this.rows.get(key)
-      if (row?.format && row.commitSha)
-        found.set(key, { ...row, format: row.format, commitSha: row.commitSha })
+      if (row?.format) found.set(key, { ...row, format: row.format })
     }
     return found
   }
   async save(
     repo: KnownRepo,
-    value: { format: RepoSchemaFormat; commitSha: string; checkedAt: Date },
+    value: { format: RepoSchemaFormat; commitSha: string | null; checkedAt: Date },
   ) {
     this.check()
     this.rows.set(repoKey(repo), { ...value, failedAt: null, stale: false })

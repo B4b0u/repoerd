@@ -476,6 +476,21 @@ describe('getBranchSchema and the stored repository format', () => {
     expect(truncated.recorded).toEqual([])
   })
 
+  it('answers branch-not-found for an empty repository and records nothing', async () => {
+    const recorded: unknown[] = []
+    const { getBranchSchema } = setup({
+      repos: [{ owner: 'acme', name: 'shop', branches: {} }],
+      onDefaultBranchDetected: async (...args) => {
+        recorded.push(args)
+      },
+    })
+    expect(await getBranchSchema({ repo })).toEqual({
+      ok: false,
+      error: { kind: 'branch-not-found', branch: 'main' },
+    })
+    expect(recorded).toEqual([])
+  })
+
   it('still answers when the record fails', async () => {
     const { getBranchSchema } = setup({
       onDefaultBranchDetected: () => Promise.reject(new Error('database is locked')),

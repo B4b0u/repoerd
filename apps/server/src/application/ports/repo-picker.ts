@@ -20,7 +20,8 @@ export interface VisitRepository {
 
 export interface StoredRepoFormat {
   format: RepoSchemaFormat
-  commitSha: string
+  /** null for a repository without commits (empty on GitHub): stored as `none`. */
+  commitSha: string | null
   checkedAt: Date
   failedAt: Date | null
   stale: boolean
@@ -32,7 +33,7 @@ export interface RepoFormatRepository {
   /** Clears `failedAt` and `stale`. */
   save(
     repo: KnownRepo,
-    value: { format: RepoSchemaFormat; commitSha: string; checkedAt: Date },
+    value: { format: RepoSchemaFormat; commitSha: string | null; checkedAt: Date },
   ): Promise<void>
   /** The commit is unchanged: only the check date moves. */
   touch(repo: KnownRepo, checkedAt: Date): Promise<void>
