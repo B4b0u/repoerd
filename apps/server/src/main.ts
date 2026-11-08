@@ -140,6 +140,7 @@ async function main() {
         gitHost,
         settings: repoSettings,
         commitSchemas,
+        now: () => now().getTime(),
         onDefaultBranchDetected: formatSync.record,
       }),
       compareBranchSchemas: makeCompareBranchSchemas({

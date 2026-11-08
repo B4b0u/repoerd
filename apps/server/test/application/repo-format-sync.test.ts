@@ -1,5 +1,6 @@
 import type { DetectedSource, ManualSource, RepoSchemaFormat } from '@repoerd/model'
 import { describe, expect, it } from 'vitest'
+import { GitHubRateLimitedError } from '../../src/application/ports/github-errors.js'
 import type { AccessibleRepo } from '../../src/application/ports/repo-directory.js'
 import type { StoredRepoFormat } from '../../src/application/ports/repo-picker.js'
 import type { CommitSchemas } from '../../src/application/services/commit-schemas.js'
@@ -310,6 +311,56 @@ describe('repository format sync', () => {
     })
   })
 
+  /** GitHub answers every branch read with a rate limit while `limited` is set. */
+  function rateLimited(w: ReturnType<typeof world>, retryAfterSeconds: number | null) {
+    const reads: string[] = []
+    const state = { limited: true }
+    const resolveBranch = w.gitHost.resolveBranch.bind(w.gitHost)
+    w.gitHost.resolveBranch = async (repo, branch) => {
+      reads.push(repo.name)
+      if (state.limited) throw new GitHubRateLimitedError(retryAfterSeconds)
+      return resolveBranch(repo, branch)
+    }
+    return { reads, state }
+  }
+
+  it('pauses the checks while GitHub rate-limits them, without marking anything failed', async () => {
+    const w = world(['a', 'b', 'c'], { concurrency: 1 })
+    const github = rateLimited(w, 30)
+    await w.known()
+    await w.sync.idle()
+    // One refused read, then nothing until the pause ends.
+    expect(github.reads).toEqual(['a'])
+    expect(w.formats.rows.size).toBe(0)
+    expect(w.timers.map((timer) => timer.delayMs)).toEqual([30_000])
+    expect(await w.known()).toEqual({
+      a: { format: null, pending: true },
+      b: { format: null, pending: true },
+      c: { format: null, pending: true },
+    })
+    await w.sync.idle()
+    expect(github.reads).toEqual(['a'])
+
+    github.state.limited = false
+    w.advance(30_000)
+    w.timers[0]?.run()
+    await w.sync.idle()
+    // The refused repository is checked first, then the rest of the queue.
+    expect(github.reads).toEqual(['a', 'a', 'b', 'c'])
+    expect(w.formats.rows.get(repoKey(w.byName('a')))).toMatchObject({
+      format: 'prisma',
+      failedAt: null,
+    })
+  })
+
+  it('pauses a minute when GitHub does not say how long to wait', async () => {
+    const w = world(['a'])
+    rateLimited(w, null)
+    await w.known()
+    await w.sync.idle()
+    expect(w.timers.map((timer) => timer.delayMs)).toEqual([60_000])
+  })
+
   it('a repository the App can no longer read fails without stopping the queue', async () => {
     const w = world(['gone', 'b'], { concurrency: 1, onHost: ['b'] })
     await w.known()
@@ -410,7 +461,7 @@ describe('repository format sync', () => {
 
   it('records the format a diagram opening detected', async () => {
     const w = world(['a'])
-    await w.sync.record(w.byName('a'), 'sha-1', [prismaSource, drizzleSource])
+    await w.sync.record(w.byName('a'), 'sha-1', [prismaSource, drizzleSource], NOW)
     expect(w.formats.rows.get(repoKey(w.byName('a')))).toMatchObject({
       format: 'both',
       commitSha: 'sha-1',
@@ -424,10 +475,17 @@ describe('repository format sync', () => {
     expect(w.detections.calls).toEqual([])
   })
 
+  it('stores the check date the diagram request took, not the time of the record', async () => {
+    const w = world(['a'])
+    const requestStart = new Date(NOW.getTime() - 5_000)
+    await w.sync.record(w.byName('a'), 'sha-1', [prismaSource], requestStart)
+    expect(w.formats.rows.get(repoKey(w.byName('a')))?.checkedAt).toEqual(requestStart)
+  })
+
   it('a record or a mark that cannot be saved is logged, never thrown', async () => {
     const w = world(['a'])
     w.formats.broken = true
-    await expect(w.sync.record(w.byName('a'), 'sha-1', [])).resolves.toBeUndefined()
+    await expect(w.sync.record(w.byName('a'), 'sha-1', [], NOW)).resolves.toBeUndefined()
     await expect(w.sync.markStale(w.byName('a'))).resolves.toBeUndefined()
     expect(w.warned).toHaveLength(2)
   })

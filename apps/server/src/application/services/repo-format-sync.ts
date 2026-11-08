@@ -1,6 +1,7 @@
 import { type DetectedSource, repoFormatOf } from '@repoerd/model'
 import { type KnownRepo, repoKey } from '../../domain/repo.js'
 import type { GitHost } from '../ports/git-host.js'
+import { GitHubRateLimitedError } from '../ports/github-errors.js'
 import type { AccessibleRepo } from '../ports/repo-directory.js'
 import type { RepoFormatRepository, StoredRepoFormat } from '../ports/repo-picker.js'
 import type { RepoSettingsRepository } from '../ports/repo-settings.js'
@@ -12,6 +13,8 @@ const HOUR_MS = 3600_000
 const RETRY_AFTER_FAILURE_MS = HOUR_MS
 const DEFAULT_CONCURRENCY = 2
 const DEFAULT_HOURLY_LIMIT = 200
+/** The pause after a rate limit when GitHub does not say how long to wait. */
+const DEFAULT_RATE_LIMIT_PAUSE_MS = 60_000
 
 /** Whether a repository's stored format must be detected again (spec §2.3). */
 export function needsCheck(
@@ -43,8 +46,16 @@ export interface RepoFormatSyncDeps {
 }
 
 export type RepoFormatSync = FormatSource & {
-  /** A detection of the default branch made anyway (a diagram was opened). Never throws. */
-  record(repo: KnownRepo, commitSha: string, detected: DetectedSource[]): Promise<void>
+  /**
+   * A detection of the default branch made anyway (a diagram was opened), dated before its branch
+   * was read. Never throws.
+   */
+  record(
+    repo: KnownRepo,
+    commitSha: string,
+    detected: DetectedSource[],
+    checkedAt: Date,
+  ): Promise<void>
   /** The manual sources changed: the stored format must be detected again. Never throws. */
   markStale(repo: KnownRepo): Promise<void>
   /** Resolves once no check runs (queued ones may wait for the hourly limit). Tests. */
@@ -82,6 +93,8 @@ export function makeRepoFormatSync(deps: RepoFormatSyncDeps): RepoFormatSync {
   /** Start times (ms) of the checks of the last hour. */
   let starts: number[] = []
   let timerSet = false
+  /** GitHub rate-limited a check: none starts before the pause ends. */
+  let paused = false
   /** Repositories whose manual sources changed while their check was running. */
   const staleWhileRunning = new Set<string>()
 
@@ -99,33 +112,61 @@ export function makeRepoFormatSync(deps: RepoFormatSyncDeps): RepoFormatSync {
     }
   }
 
-  function next(): AccessibleRepo | undefined {
+  function next(): { repo: AccessibleRepo; priority: boolean } | undefined {
     for (const pending of [priorityQueue, queue]) {
       const first = pending.entries().next()
       if (!first.done) {
         const [key, repo] = first.value
         pending.delete(key)
-        return repo
+        return { repo, priority: pending === priorityQueue }
       }
     }
     return undefined
   }
 
+  /** Puts a repository whose check could not run back at the head of its queue. */
+  function requeueFirst(repo: AccessibleRepo, priority: boolean) {
+    const pending = priority ? priorityQueue : queue
+    const rest = [...pending]
+    pending.clear()
+    pending.set(repoKey(repo), repo)
+    for (const [key, queued] of rest) pending.set(key, queued)
+  }
+
+  /** GitHub refused a check for its rate limit: no check starts before `retryAfterSeconds`. */
+  function pause(error: GitHubRateLimitedError) {
+    if (paused) return
+    paused = true
+    deps.logger.warn(
+      { retryAfterSeconds: error.retryAfterSeconds },
+      'GitHub rate limit reached: the schema format checks pause',
+    )
+    schedule(
+      () => {
+        paused = false
+        pump()
+      },
+      error.retryAfterSeconds === null
+        ? DEFAULT_RATE_LIMIT_PAUSE_MS
+        : error.retryAfterSeconds * 1000,
+    )
+  }
+
   function pump() {
-    while (running.size < concurrency && hasQueued()) {
+    while (!paused && running.size < concurrency && hasQueued()) {
       const nowMs = deps.now().getTime()
       starts = starts.filter((start) => start > nowMs - HOUR_MS)
       if (starts.length >= hourlyLimit) {
         waitForWindow(nowMs)
         return
       }
-      const repo = next()
-      if (!repo) return
+      const picked = next()
+      if (!picked) return
       starts.push(nowMs)
-      const key = repoKey(repo)
+      const key = repoKey(picked.repo)
       running.set(
         key,
-        check(repo).finally(() => {
+        check(picked.repo, picked.priority).finally(() => {
           running.delete(key)
           pump()
         }),
@@ -160,8 +201,12 @@ export function makeRepoFormatSync(deps: RepoFormatSyncDeps): RepoFormatSync {
     await deps.formats.save(toKnown(repo), { format: 'none', commitSha: null, checkedAt })
   }
 
-  /** One repository: never throws, a failure is stored (retried after an hour) and logged. */
-  async function check(repo: AccessibleRepo): Promise<void> {
+  /**
+   * One repository: never throws, a failure is stored (retried after an hour) and logged. A rate
+   * limit is not the repository's failure: it goes back to the head of its queue and the checks
+   * pause, rather than spending the rest of the queue on refused requests.
+   */
+  async function check(repo: AccessibleRepo, priority: boolean): Promise<void> {
     const target = toKnown(repo)
     const key = repoKey(target)
     // The check date is taken before reading the branch: a push during the check stays newer.
@@ -185,6 +230,11 @@ export function makeRepoFormatSync(deps: RepoFormatSyncDeps): RepoFormatSync {
       await deps.formats.save(target, { format: repoFormatOf(detected), commitSha, checkedAt })
       if (staleWhileRunning.has(key)) await deps.formats.markStale(target)
     } catch (error) {
+      if (error instanceof GitHubRateLimitedError) {
+        requeueFirst(repo, priority)
+        pause(error)
+        return
+      }
       deps.logger.warn(
         { err: error, repo: label(target) },
         'Could not detect the schema format of a repository',
@@ -233,12 +283,12 @@ export function makeRepoFormatSync(deps: RepoFormatSyncDeps): RepoFormatSync {
       return result
     },
 
-    async record(repo, commitSha, detected) {
+    async record(repo, commitSha, detected, checkedAt) {
       try {
         await deps.formats.save(toKnown(repo), {
           format: repoFormatOf(detected),
           commitSha,
-          checkedAt: deps.now(),
+          checkedAt,
         })
       } catch (error) {
         deps.logger.warn(

@@ -36,6 +36,7 @@ function setup(
       repo: KnownRepo,
       commitSha: string,
       detected: DetectedSource[],
+      checkedAt: Date,
     ) => Promise<void>
   } = {},
 ) {
@@ -465,6 +466,25 @@ describe('getBranchSchema and the stored repository format', () => {
     ])
     await getBranchSchema({ repo, branch: 'main' })
     expect(recorded).toHaveLength(2)
+  })
+
+  it('dates the record before reading the branch, so a push during the request stays newer', async () => {
+    let clock = Date.parse('2026-10-10T12:00:00Z')
+    const dates: Date[] = []
+    const world = setup({
+      now: () => clock,
+      onDefaultBranchDetected: async (_repo, _commitSha, _detected, checkedAt) => {
+        dates.push(checkedAt)
+      },
+    })
+    const resolveBranch = world.gitHost.resolveBranch.bind(world.gitHost)
+    world.gitHost.resolveBranch = async (ref, branch) => {
+      const sha = await resolveBranch(ref, branch)
+      clock += 5_000
+      return sha
+    }
+    await world.getBranchSchema({ repo })
+    expect(dates).toEqual([new Date('2026-10-10T12:00:00Z')])
   })
 
   it('records nothing for another branch or a truncated tree', async () => {

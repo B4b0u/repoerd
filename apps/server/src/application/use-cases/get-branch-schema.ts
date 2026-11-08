@@ -29,14 +29,17 @@ export type GetBranchSchema = (
 type Deps = {
   gitHost: GitHost
   settings: RepoSettingsRepository
+  /** Clock (ms) dating the detections; defaults to `Date.now`. */
+  now?: () => number
   /**
-   * The complete detection of the default branch, as the stored repository format (spec §2.3).
-   * Its failures never fail the request.
+   * The complete detection of the default branch, as the stored repository format (spec §2.3),
+   * with the time taken before reading the branch. Its failures never fail the request.
    */
   onDefaultBranchDetected?: (
     repo: KnownRepo,
     commitSha: string,
     detected: DetectedSource[],
+    checkedAt: Date,
   ) => Promise<void>
 } & (
   | {
@@ -50,12 +53,15 @@ type Deps = {
 export function makeGetBranchSchema(deps: Deps): GetBranchSchema {
   const { detect, outcomeFor } =
     'commitSchemas' in deps ? deps.commitSchemas : makeCommitSchemas(deps)
+  const now = deps.now ?? Date.now
 
   return async ({ repo, branch: requestedBranch, sourceId }) => {
     const summary = await deps.gitHost.getRepository(repo)
     if (!summary) return err({ kind: 'repo-not-found' })
 
     const branch = requestedBranch ?? summary.defaultBranch
+    // Taken before reading the branch: a push landing during the request stays newer.
+    const checkedAt = new Date(now())
     const commitSha = await deps.gitHost.resolveBranch(repo, branch)
     if (!commitSha) return err({ kind: 'branch-not-found', branch })
 
@@ -63,7 +69,9 @@ export function makeGetBranchSchema(deps: Deps): GetBranchSchema {
     const { detected, truncated } = await detect(repo, commitSha, manual)
     if (branch === summary.defaultBranch && !truncated && deps.onDefaultBranchDetected) {
       // The hook logs its own failures (RepoFormatSync.record).
-      await deps.onDefaultBranchDetected(repo, commitSha, detected).catch(() => undefined)
+      await deps
+        .onDefaultBranchDetected(repo, commitSha, detected, checkedAt)
+        .catch(() => undefined)
     }
     const view = (selectedSourceId: string | null, outcome: SchemaOutcome): BranchSchemaView => ({
       repo,

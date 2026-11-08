@@ -131,6 +131,7 @@ function common(
         gitHost,
         settings,
         commitSchemas,
+        now: () => now().getTime(),
         onDefaultBranchDetected: formatSync.record,
       }),
     compareBranchSchemas: makeCompareBranchSchemas({ gitHost, settings, commitSchemas }),
