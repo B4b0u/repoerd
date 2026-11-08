@@ -5,6 +5,10 @@ import { FavoriteButton } from './FavoriteButton'
 import { FormatBadge } from './FormatBadge'
 import { DefaultBranch, PrivateLabel, repoHref } from './RepoCard'
 
+/** The id of a repository's star in its row: where the focus goes when its favourite card leaves. */
+export const rowStarId = (repo: Pick<RepoDto, 'owner' | 'name'>) =>
+  `row-star-${repo.owner}/${repo.name}`
+
 /**
  * A repository in the full list: the star, then a link to its diagram over the rest of the row.
  * `showOwner` when no owner heading above says whose it is.
@@ -21,7 +25,7 @@ export function RepoRow({
   const factsId = useId()
   return (
     <li className="flex items-center gap-1 pl-2 transition-colors hover:bg-accent/50 has-[a:focus-visible]:bg-accent/50">
-      <FavoriteButton repo={repo} onToggle={onToggleFavorite} />
+      <FavoriteButton repo={repo} onToggle={onToggleFavorite} id={rowStarId(repo)} />
       <Link
         href={repoHref(repo)}
         aria-label={`${repo.owner}/${repo.name}`}

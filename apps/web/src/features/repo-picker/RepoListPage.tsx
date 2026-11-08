@@ -39,7 +39,7 @@ import { useFavoriteToggle, useRepoFormatPolling, useRepoList, useSchemaOnly } f
 import { OwnerAvatar } from './OwnerAvatar'
 import { RepoCard } from './RepoCard'
 import { RepoListSkeleton } from './RepoListSkeleton'
-import { RepoRow } from './RepoRow'
+import { RepoRow, rowStarId } from './RepoRow'
 import { buildRepoSections, type RepoSections } from './repo-sections'
 
 const REPOS_KEY = ['repos'] as const
@@ -53,6 +53,8 @@ export function RepoListPage() {
   const [query, setQuery] = useState('')
   const [schemaOnly, setSchemaOnly] = useSchemaOnly()
   const search = useRef<HTMLInputElement>(null)
+  const allTab = useRef<HTMLButtonElement>(null)
+  const allReposHeading = useRef<HTMLHeadingElement>(null)
   useSlashShortcut(search)
   const repos = useRepoList()
   const list = repos.data?.repos
@@ -67,6 +69,32 @@ export function RepoListPage() {
     [list, query, schemaOnly],
   )
   const tab = schemaOnly ? SCHEMA_TAB : ALL_TAB
+
+  // Unstarred from its favourite card, the repository's card leaves with the focused star: the
+  // focus moves to the star of its row (or to the list's heading when the row is not shown).
+  const focusAfterUnstar = useRef<string | null>(null)
+  const unstarFromCard = useCallback(
+    (repo: RepoDto) => {
+      if (repo.favorite) focusAfterUnstar.current = rowStarId(repo)
+      toggleFavorite(repo)
+    },
+    [toggleFavorite],
+  )
+  useEffect(() => {
+    const id = focusAfterUnstar.current
+    if (!id || !sections) return
+    // Still a card: the update is on its way, or the server refused it.
+    if (sections.favorites.some((repo) => rowStarId(repo) === id)) return
+    focusAfterUnstar.current = null
+    if (document.activeElement && document.activeElement !== document.body) return
+    ;(document.getElementById(id) ?? allReposHeading.current)?.focus()
+  }, [sections])
+
+  const showAll = () => {
+    setSchemaOnly(false)
+    // The button used leaves with the filter: the focus goes to the tab now selected.
+    allTab.current?.focus()
+  }
 
   const clearSearch = () => {
     setQuery('')
@@ -120,7 +148,7 @@ export function RepoListPage() {
               <TabsTrigger value={SCHEMA_TAB} className="px-3">
                 {t('withSchema')}
               </TabsTrigger>
-              <TabsTrigger value={ALL_TAB} className="px-3">
+              <TabsTrigger ref={allTab} value={ALL_TAB} className="px-3">
                 {t('all')}
               </TabsTrigger>
             </TabsList>
@@ -133,7 +161,9 @@ export function RepoListPage() {
                 hasFavorite={list?.some((repo) => repo.favorite) ?? false}
                 query={query}
                 onToggleFavorite={toggleFavorite}
-                onShowAll={() => setSchemaOnly(false)}
+                onUnstarFromCard={unstarFromCard}
+                allReposHeading={allReposHeading}
+                onShowAll={showAll}
                 onClearSearch={clearSearch}
               />
             ) : (
@@ -170,6 +200,8 @@ function RepoSectionsView({
   hasFavorite,
   query,
   onToggleFavorite,
+  onUnstarFromCard,
+  allReposHeading,
   onShowAll,
   onClearSearch,
 }: {
@@ -177,6 +209,9 @@ function RepoSectionsView({
   hasFavorite: boolean
   query: string
   onToggleFavorite: (repo: RepoDto) => void
+  /** The star of a favourite card. */
+  onUnstarFromCard: (repo: RepoDto) => void
+  allReposHeading: RefObject<HTMLHeadingElement | null>
   onShowAll: () => void
   onClearSearch: () => void
 }) {
@@ -193,7 +228,7 @@ function RepoSectionsView({
       )}
       {favorites.length > 0 && (
         <Section icon={Star} title={t('favorites')} iconClassName="fill-current text-key">
-          <CardGrid repos={favorites} onToggleFavorite={onToggleFavorite} />
+          <CardGrid repos={favorites} onToggleFavorite={onUnstarFromCard} />
         </Section>
       )}
       {recents.length > 0 && (
@@ -201,7 +236,7 @@ function RepoSectionsView({
           <CardGrid repos={recents} opened onToggleFavorite={onToggleFavorite} />
         </Section>
       )}
-      <Section icon={FolderGit2} title={t('allRepos')}>
+      <Section icon={FolderGit2} title={t('allRepos')} headingRef={allReposHeading}>
         {shown > 0 ? (
           <Card className="gap-0 divide-y overflow-hidden py-0">
             {owners.map((group) => (
@@ -269,17 +304,25 @@ function Section({
   icon: Icon,
   iconClassName,
   title,
+  headingRef,
   children,
 }: {
   icon: LucideIcon
   iconClassName?: string
   title: string
+  /** A heading that can receive the focus (when the control used disappears). */
+  headingRef?: RefObject<HTMLHeadingElement | null>
   children: ReactNode
 }) {
   const headingId = useId()
   return (
     <section aria-labelledby={headingId} className="flex flex-col gap-3">
-      <h2 id={headingId} className="flex items-center gap-2 text-sm font-semibold tracking-tight">
+      <h2
+        id={headingId}
+        ref={headingRef}
+        tabIndex={headingRef ? -1 : undefined}
+        className="flex items-center gap-2 text-sm font-semibold tracking-tight outline-none"
+      >
         <Icon className={cn('size-4 text-muted-foreground', iconClassName)} />
         {title}
       </h2>

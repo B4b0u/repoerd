@@ -132,6 +132,29 @@ describe('RepoListPage', () => {
     expect(screen.getByText('5 repositories')).toBeTruthy()
   })
 
+  it('moves the focus to the "All" tab when "Show all repositories" disappears', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(await screen.findByRole('button', { name: 'Show all repositories' }))
+    expect(screen.queryByRole('button', { name: 'Show all repositories' })).toBeNull()
+    expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'All' }))
+  })
+
+  it('moves the focus to the row star when a favourite card leaves with its star', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    const favorites = await screen.findByRole('region', { name: 'Favourites' })
+    await user.click(
+      within(favorites).getByRole('button', { name: 'Remove acme/storefront from favourites' }),
+    )
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Favourites' })).toBeNull())
+    expect(document.activeElement).toBe(
+      within(section('All repositories')).getByRole('button', {
+        name: 'Add acme/storefront to favourites',
+      }),
+    )
+  })
+
   it('shows the format of each repository and when it was checked', async () => {
     renderPage()
     const all = await screen.findByRole('region', { name: 'All repositories' })
@@ -237,7 +260,7 @@ describe('RepoListPage', () => {
     await act(() => i18n.changeLanguage('fr'))
     expect(screen.getByRole('heading', { level: 2, name: 'Favoris' })).toBeTruthy()
     expect(screen.getByRole('tab', { name: 'Avec un schéma' })).toBeTruthy()
-    expect(screen.getByText('1 repo sans schéma masqué')).toBeTruthy()
+    expect(screen.getByText('1 dépôt sans schéma masqué')).toBeTruthy()
   })
 
   it('shows placeholders while the list loads, announced to screen readers', async () => {

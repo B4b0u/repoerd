@@ -8,10 +8,12 @@ import { IconButton } from '../../shared/ui/IconButton'
 export function FavoriteButton({
   repo,
   onToggle,
+  id,
   className,
 }: {
   repo: RepoDto
   onToggle: (repo: RepoDto) => void
+  id?: string
   className?: string
 }) {
   const { t } = useTranslation('repos')
@@ -19,6 +21,7 @@ export function FavoriteButton({
   return (
     <IconButton
       label={t(repo.favorite ? 'removeFavorite' : 'addFavorite', { repo: name })}
+      id={id}
       aria-pressed={repo.favorite}
       className={cn('text-muted-foreground hover:text-key aria-pressed:text-key', className)}
       onClick={() => onToggle(repo)}
