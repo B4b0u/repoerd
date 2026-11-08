@@ -6,7 +6,7 @@ RepoERD stores secrets: the private key and client secret of your GitHub App, an
 
 | Version | Supported |
 |---|---|
-| 0.1.x (latest release) | Yes |
+| 0.2.x (latest release) | Yes |
 | Older | No |
 
 Fixes are released as a new patch version of the latest minor line. Upgrade by pulling the new image (see "Backups and upgrades" in the README).

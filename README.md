@@ -2,18 +2,20 @@
 
 RepoERD is a self-hosted web app that shows the database schema of your GitHub repositories as an entity-relationship diagram, branch by branch. It reads Prisma and Drizzle (PostgreSQL) schemas straight from the code: nothing to install in your projects, no connection to a database. Everyone arranges the tables as on a whiteboard, and RepoERD shows what a branch changes in the schema before you merge it.
 
-![A Prisma schema of 25 tables in RepoERD, dark theme](docs/images/storefront-dark.png)
+![The orders and marketing table groups of a 25-table Prisma schema in RepoERD, each a coloured frame around its tables, with the table list grouped the same way; dark theme](docs/images/storefront-dark.png)
 
 ## Features
 
 - **Finds the schemas by itself**, on any branch. Prisma: a `schema.prisma`, a `prisma/` folder with `models/`, multi-file schemas, `prisma.config`, Prisma 7. Drizzle: `drizzle.config.*`, barrels and relative imports, `tsconfig` path aliases, workspace packages, `casing`. Monorepos with several schemas get a source picker, and when detection is not enough, the sources of a repository can be declared by hand (files, folders or globs).
 - **A diagram you arrange.** Table positions are saved on the server per user, repository, source and display mode: your moves never change anyone else's layout. New tables are placed next to the existing ones automatically.
 - **Three display modes** (all columns, keys only, table names only) and a semantic zoom that keeps only the names when you zoom out on a large schema.
-- **Table details**: columns (type, primary and foreign keys, nullability, defaults, comments), indexes, constraints with `ON DELETE` / `ON UPDATE`, and a "related tables" view that lays out a table with its direct neighbours.
+- **Table groups, shared by the team**: groups are proposed from the schema files (one per domain folder, else per file, else per Postgres schema) and saved for everyone by anyone with push access. They are edited on the diagram: rename, recolour, delete, place a table from its details or several at once by selecting them with Shift. Each group is a coloured, named frame around its tables, the table list shows the tables by group, and the automatic layout places the tables group by group.
+- **Table details**: the file that declares the table, columns (type, primary and foreign keys, nullability, defaults, comments), indexes, constraints with `ON DELETE` / `ON UPDATE`, and a "related tables" view that lays out a table with its direct neighbours.
 - **Branch comparison**: what a branch changes in the schema — tables, columns, indexes, constraints, relationships and enums added, removed or modified, with every value before → after — from its fork point like a pull request, or directly between two branches. A list of changes, and a link to share.
 - **PostgreSQL schemas and keys**: tables outside `public` (Prisma `@@schema`, Drizzle `pgSchema`) are named `schema.table`; composite primary and foreign keys are drawn as such; views are counted, not drawn.
-- **Hub tables**: a table referenced by more than 30% of the schema is detected as a hub (typical: `organizations` in a multi-tenant schema). Its links can be drawn all, first-order only, or hidden (hovering or selecting a table shows its links again), and the choice lives in the URL so it is shareable.
+- **Hub tables**: a table referenced by more than 30% of the schema is detected as a hub (typical: `organizations` in a multi-tenant schema), and any table can be marked as one from its details. Its links can be drawn all, first-order only, or hidden (hovering or selecting a table shows its links again), and the choice lives in the URL so it is shareable.
 - **Shareable links**: the branch, source, comparison, selected table, hidden tables, display mode, hub tables and hub-link mode are in the URL.
+- **A repository page** with your favourites and the repositories you opened last, the schema format of every repository (Prisma, Drizzle or none, detected in the background and checked again after a push), and a "With a schema" filter, on by default, that hides the repositories without one.
 - **Access follows GitHub**: people see only the repositories they can reach through the GitHub App, and changing the sources of a repository needs push access. Sign-in can be restricted to some organisations; administrators manage the instance from `/admin`.
 - English and French, light and dark themes, a keyboard-friendly table list.
 
@@ -23,7 +25,9 @@ RepoERD is a self-hosted web app that shows the database schema of your GitHub r
 | **Comparing a branch with main** | **A modified table, before → after** |
 | ![The changes of the feature/subscriptions branch](docs/images/compare-changes.png) | ![The orders table in the comparison](docs/images/compare-detail.png) |
 
-![The same schema, light theme](docs/images/storefront-light.png)
+![The repository page: two favourites, the three repositories opened last, and every repository with its schema format (Prisma or Drizzle)](docs/images/repositories.png)
+
+![The same table groups, light theme](docs/images/storefront-light.png)
 
 ## Try it in demo mode
 
@@ -31,7 +35,7 @@ The demo mode serves example repositories (among them the Prisma and Drizzle sho
 
 ```bash
 docker run --rm -p 3000:3000 -e GITHUB_MODE=fake \
-  -e SECRET_KEY=demo-only-secret-key-0123456789abcdef ghcr.io/b4b0u/repoerd:0.1
+  -e SECRET_KEY=demo-only-secret-key-0123456789abcdef ghcr.io/b4b0u/repoerd:0.2
 ```
 
 Then open <http://localhost:3000>: you are signed in as the demo user `dev`.
@@ -126,6 +130,7 @@ The whole state is the SQLite file in `/data` (the `repoerd-data` volume). It ho
 - the users (GitHub id, login, avatar URL, administrator flag, last activity) and their sessions (only a hash of each session token);
 - the GitHub App credentials and each user's GitHub tokens, **encrypted** with `SECRET_KEY` (AES-256-GCM);
 - the layouts and the manual sources of each repository;
+- the table groups of each repository and source, shared by the team, with the GitHub user id of the last person who changed them;
 - each user's favourite repositories and last 20 visits;
 - each repository's detected schema format, with the date of its check;
 - caches: the contents of the schema files people open, the detected sources and the parsed schemas. Cached data older than **30 days** is deleted at start-up and every day.
@@ -141,7 +146,7 @@ Sessions last 30 days from the last visit, and 90 days at most after the sign-in
 
 If you use a host bind mount instead of the named volume, the folder must be writable by uid 1000 (`chown 1000:1000 <folder>`), since the image runs as the `node` user.
 
-`docker-compose.yml` pins the `0.1` line (`ghcr.io/b4b0u/repoerd:0.1`): `docker compose pull && docker compose up -d` then brings patch releases of 0.1 only. To move to a new minor version, back up, change the tag on purpose (read the [changelog](CHANGELOG.md) first), and recreate the container. Images are published as `X.Y.Z`, `X.Y`, `X` (from 1.0 on) and `latest`. `/healthz` reports the running version.
+`docker-compose.yml` pins the `0.2` line (`ghcr.io/b4b0u/repoerd:0.2`): `docker compose pull && docker compose up -d` then brings patch releases of 0.2 only. To move to a new minor version, back up, change the tag on purpose (read the [changelog](CHANGELOG.md) first), and recreate the container. Images are published as `X.Y.Z`, `X.Y`, `X` (from 1.0 on) and `latest`. `/healthz` reports the running version.
 
 ## Recovery
 
@@ -167,7 +172,7 @@ docker compose run --rm repoerd repoerd-admin <command>
 | `promote <login>` | Makes a user who signed in once an administrator, at once. Use it when the last administrator left or lost their GitHub access: `/admin` never removes the last administrator. |
 | `set-public-url <url>` | Changes the public URL (validated as in `/admin`). Restart the container to apply, and declare `<url>/auth/callback` in the GitHub App. |
 | `set-allowed-orgs [org ...]` | Restricts sign-in to these GitHub organisations (validated as in `/admin`); with no organisation, removes the restriction. Use it when nobody can sign in because the GitHub App is not installed on an allowed organisation. Restart the container to apply. |
-| `reset-app` | Forgets the GitHub App, the users' GitHub tokens and every session. Layouts, repository settings, administrators, allowed organisations and the public URL are kept. Restart the container: it prints a new setup code, then open `/setup` to register a GitHub App again (the instance is ready as soon as the App is saved). |
+| `reset-app` | Forgets the GitHub App, the users' GitHub tokens and every session. Layouts, repository settings, table groups, favourites, administrators, allowed organisations and the public URL are kept. Restart the container: it prints a new setup code, then open `/setup` to register a GitHub App again (the instance is ready as soon as the App is saved). |
 
 **Changing `SECRET_KEY`.** A key that does not open the stored secrets stops the server, and outside demo mode a published example key or a weak key is refused. Restore the original key, or start over with the GitHub App:
 
@@ -184,7 +189,7 @@ While you can still sign in, the App can also be replaced from `/admin` ("Replac
 - GitHub.com only: GitHub Enterprise Server is not supported.
 - PostgreSQL only. A Drizzle config with another `dialect` is reported as unsupported.
 - One server instance: rate limits, the parsing queue, the repository visibility caches and the background queue that detects each repository's schema format live in memory. That queue reads GitHub with the installation token, at most 2 repositories at a time and 200 per hour, and checks a repository again only after a push.
-- Image size is about 460 MB (the parser ships native binaries).
+- Image size is about 490 MB (the parser ships native binaries).
 
 **Parsing**
 
@@ -194,7 +199,7 @@ While you can still sign in, the App can also be replaced from `/admin` ("Replac
 - A `drizzle.config` with several `module.exports` / `export default`: the first one is read (at run time, it is the last one).
 - Imports: an `extends` pointing to an npm package (`@tsconfig/…`) is not followed; at most 200 `package.json` files are read to find the workspace packages.
 - The nesting limit is an estimate: a regular expression with many parentheses can get a file refused.
-- A repository tree that GitHub truncates (over 100,000 entries or 7 MB) gives a partial detection, which manual sources cannot fix.
+- A repository tree that GitHub truncates (over 100,000 entries or 7 MB) gives a partial detection, which manual sources cannot fix. On the repository page, such a repository shows the formats found in the partial tree; when it shows none, it is checked again a day later.
 - Globs differ from picomatch in exotic cases (`*/**` against a file at the root, `**.ts` within a segment).
 - Views are neither drawn nor compared; in a comparison, only the views of the compared branch are counted.
 
@@ -207,6 +212,8 @@ While you can still sign in, the App can also be replaced from `/admin` ("Replac
 - Links with many hidden tables use a compact form that only applies to the same set of tables: on another branch, or in a comparison, it is ignored (nothing hidden).
 - The browser's Back button does not ask before leaving unsaved changes to manual sources.
 - A layout is carried over to a moved source only between detected sources; a manual source neither passes on nor takes over a layout.
+- Table groups belong to a source: moving the schema file of a detected source, or renaming a manual source, starts it again without groups (the layout of a moved detected source follows it, its groups do not).
+- Placing several tables in a group at once needs Shift and a pointer (Shift+click or Shift+drag); from the keyboard, tables are placed one by one from their details.
 
 **Administration**
 

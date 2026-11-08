@@ -88,13 +88,13 @@ Most are enforced by `pnpm depcruise` and `pnpm verify`:
 
 ## Releasing (maintainers)
 
-1. In a pull request: set the new version in every `package.json` (the root, `apps/*`, `packages/*`, `e2e`), add a `CHANGELOG.md` entry with the release date, and, for a new minor version, the new tag line in `docker-compose.yml` and the README (`0.2`, then `1`, `1.2`…). Merge it into `main` once every check is green.
+1. In a pull request: set the new version in every `package.json` (the root, `apps/*`, `packages/*`, `e2e`), add a `CHANGELOG.md` entry with the release date, and, for a new minor version, the new tag line in `docker-compose.yml` and the README (`0.3`, then `1`, `1.2`…). Merge it into `main` once every check is green.
 2. Tag the merge commit on `main` and push the tag:
 
    ```bash
    git fetch origin
-   git tag -a v0.1.0 -m "v0.1.0" origin/main
-   git push origin v0.1.0
+   git tag -a v0.2.0 -m "v0.2.0" origin/main
+   git push origin v0.2.0
    ```
 
 3. `release.yml` then checks that the tag is on `main`, runs the CI again, builds the amd64 and arm64 images and smoke-tests both (arm64 under QEMU), pushes `ghcr.io/b4b0u/repoerd` with the tags `X.Y.Z`, `X.Y`, `X` (from 1.0 on) and `latest`, with provenance and an SBOM, and creates the GitHub release with generated notes. A pre-release tag (`v0.2.0-rc.1`) only gets its own image tag and is marked as a pre-release. `latest` follows the most recent non-pre-release tag pushed.

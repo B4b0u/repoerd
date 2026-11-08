@@ -134,12 +134,16 @@ function world(
   }
   const timers: { run: () => void; delayMs: number }[] = []
   const warned: { details: object; message: string }[] = []
+  const infos: { details: object; message: string }[] = []
   const sync = makeRepoFormatSync({
     formats,
     gitHost,
     settings,
     commitSchemas,
-    logger: { warn: (details, message) => warned.push({ details, message }) },
+    logger: {
+      warn: (details, message) => warned.push({ details, message }),
+      info: (details, message) => infos.push({ details, message }),
+    },
     now: () => clock,
     concurrency: options.concurrency,
     hourlyLimit: options.hourlyLimit,
@@ -156,6 +160,7 @@ function world(
     detections,
     timers,
     warned,
+    infos,
     advance: (ms: number) => {
       clock = new Date(clock.getTime() + ms)
     },
@@ -411,13 +416,99 @@ describe('repository format sync', () => {
     expect(w.formats.rows.get(repoKey(empty))?.format).toBe('prisma')
   })
 
-  it('does not store the format of a truncated tree', async () => {
+  it('stores the format found in a truncated tree', async () => {
     const w = world(['a'], { truncated: true })
     await w.known()
     await w.sync.idle()
     expect(w.formats.rows.get(repoKey(w.byName('a')))).toMatchObject({
-      format: null,
-      failedAt: NOW,
+      format: 'prisma',
+      failedAt: null,
+    })
+    expect(w.warned).toEqual([])
+  })
+
+  describe('a truncated tree where nothing is found', () => {
+    it('is failed, logged at info, and kept out of the queue for 24 hours', async () => {
+      const w = world(['a'], { truncated: true, formats: { a: 'none' } })
+      await w.known()
+      await w.sync.idle()
+      expect(w.formats.rows.get(repoKey(w.byName('a')))).toMatchObject({
+        format: null,
+        failedAt: NOW,
+      })
+      expect(w.warned).toEqual([])
+      expect(w.infos).toHaveLength(1)
+      expect(w.infos[0]?.details).toMatchObject({ repo: 'acme/a' })
+
+      w.advance(2 * HOUR)
+      await w.known()
+      await w.sync.idle()
+      expect(w.detections.calls).toEqual(['a'])
+
+      w.advance(23 * HOUR)
+      await w.known()
+      await w.sync.idle()
+      expect(w.detections.calls).toEqual(['a', 'a'])
+    })
+  })
+
+  describe('the back-off of a truncated tree', () => {
+    async function backedOff() {
+      const w = world(['a'], { truncated: true, formats: { a: 'none' } })
+      await w.known()
+      await w.sync.idle()
+      w.advance(2 * HOUR)
+      await w.known()
+      await w.sync.idle()
+      expect(w.detections.calls).toEqual(['a'])
+      return w
+    }
+
+    it('ends when the manual sources change', async () => {
+      const w = await backedOff()
+      await w.sync.markStale(w.byName('a'))
+      await w.known()
+      await w.sync.idle()
+      expect(w.detections.calls).toEqual(['a', 'a'])
+    })
+
+    it('ends when a detection is recorded', async () => {
+      const w = await backedOff()
+      const repo = w.byName('a')
+      await w.sync.record(repo, 'sha', [], w.formats.rows.get(repoKey(repo))?.checkedAt ?? NOW)
+      w.advance(2 * HOUR)
+      await w.formats.markStale(repo)
+      await w.known()
+      await w.sync.idle()
+      expect(w.detections.calls).toEqual(['a', 'a'])
+    })
+
+    it('is not set when the manual sources change during the check', async () => {
+      const w = world(['a'], { truncated: true, formats: { a: 'none' } })
+      await w.known()
+      await w.sync.markStale(w.byName('a'))
+      await w.sync.idle()
+      expect(w.detections.calls).toEqual(['a'])
+      w.advance(2 * HOUR)
+      await w.known()
+      await w.sync.idle()
+      expect(w.detections.calls).toEqual(['a', 'a'])
+    })
+
+    it('is removed once expired, so a later truncated result sets a fresh one', async () => {
+      const w = await backedOff()
+      w.advance(23 * HOUR)
+      await w.known()
+      await w.sync.idle()
+      expect(w.detections.calls).toEqual(['a', 'a'])
+      w.advance(2 * HOUR)
+      await w.known()
+      await w.sync.idle()
+      expect(w.detections.calls).toEqual(['a', 'a'])
+      w.advance(23 * HOUR)
+      await w.known()
+      await w.sync.idle()
+      expect(w.detections.calls).toEqual(['a', 'a', 'a'])
     })
   })
 

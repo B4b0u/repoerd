@@ -11,6 +11,8 @@ import type { CommitSchemas } from './commit-schemas.js'
 const HOUR_MS = 3600_000
 /** A failed check is not retried before this (spec §2.3). */
 const RETRY_AFTER_FAILURE_MS = HOUR_MS
+/** A repository whose truncated tree shows no schema is not checked again before this. */
+const RETRY_AFTER_TRUNCATED_MS = 24 * HOUR_MS
 const DEFAULT_CONCURRENCY = 2
 const DEFAULT_HOURLY_LIMIT = 200
 /** The pause after a rate limit when GitHub does not say how long to wait. */
@@ -35,7 +37,10 @@ export interface RepoFormatSyncDeps {
   settings: RepoSettingsRepository
   /** Shared with the diagram routes (main.ts): a detection already cached costs no GitHub call. */
   commitSchemas: CommitSchemas
-  logger: { warn(details: object, message: string): void }
+  logger: {
+    warn(details: object, message: string): void
+    info(details: object, message: string): void
+  }
   now: () => Date
   /** Checks running at once (default 2). */
   concurrency?: number
@@ -97,6 +102,8 @@ export function makeRepoFormatSync(deps: RepoFormatSyncDeps): RepoFormatSync {
   let paused = false
   /** Repositories whose manual sources changed while their check was running. */
   const staleWhileRunning = new Set<string>()
+  /** Repositories whose truncated tree showed no schema, by key: when they may be checked again. */
+  const truncatedUntil = new Map<string, number>()
 
   const isQueued = (key: string) => priorityQueue.has(key) || queue.has(key)
   const hasQueued = () => priorityQueue.size > 0 || queue.size > 0
@@ -225,9 +232,28 @@ export function makeRepoFormatSync(deps: RepoFormatSyncDeps): RepoFormatSync {
       }
       const manual = await deps.settings.get(target)
       const { detected, truncated } = await deps.commitSchemas.detect(target, commitSha, manual)
-      // A truncated listing may hide sources: its format is not trusted.
-      if (truncated) throw new Error('The tree of the default branch is truncated')
-      await deps.formats.save(target, { format: repoFormatOf(detected), commitSha, checkedAt })
+      const format = repoFormatOf(detected)
+      // A truncated listing may hide sources. One found is kept (a second format may be missed);
+      // none found is a failure, and the repository is not checked every hour for it.
+      if (truncated && format === 'none') {
+        // Sources saved during the check were not read by it: no back-off, the next list checks again.
+        if (staleWhileRunning.has(key)) {
+          deps.logger.info(
+            { repo: label(target) },
+            'The tree of the default branch is truncated and shows no schema: sources changed during the check, checked again at the next list',
+          )
+        } else {
+          truncatedUntil.set(key, deps.now().getTime() + RETRY_AFTER_TRUNCATED_MS)
+          deps.logger.info(
+            { repo: label(target) },
+            'The tree of the default branch is truncated and shows no schema: not checked again for 24 hours',
+          )
+        }
+        await deps.formats.markFailed(target, deps.now())
+        return
+      }
+      await deps.formats.save(target, { format, commitSha, checkedAt })
+      truncatedUntil.delete(key)
       if (staleWhileRunning.has(key)) await deps.formats.markStale(target)
     } catch (error) {
       if (error instanceof GitHubRateLimitedError) {
@@ -267,6 +293,11 @@ export function makeRepoFormatSync(deps: RepoFormatSyncDeps): RepoFormatSync {
       ]
       for (const repo of ordered) {
         const key = repoKey(repo)
+        const backedOffUntil = truncatedUntil.get(key)
+        if (backedOffUntil !== undefined) {
+          if (backedOffUntil > now.getTime()) continue
+          truncatedUntil.delete(key)
+        }
         if (needsCheck(stored.get(key), failures.get(key), repo, now))
           enqueue(repo, priority.has(key))
       }
@@ -284,6 +315,8 @@ export function makeRepoFormatSync(deps: RepoFormatSyncDeps): RepoFormatSync {
     },
 
     async record(repo, commitSha, detected, checkedAt) {
+      // A detection was made anyway: the back-off no longer applies.
+      truncatedUntil.delete(repoKey(repo))
       try {
         await deps.formats.save(toKnown(repo), {
           format: repoFormatOf(detected),
@@ -300,6 +333,8 @@ export function makeRepoFormatSync(deps: RepoFormatSyncDeps): RepoFormatSync {
 
     async markStale(repo) {
       const key = repoKey(repo)
+      // The sources changed: the next check may find what the truncated tree hid.
+      truncatedUntil.delete(key)
       if (running.has(key)) staleWhileRunning.add(key)
       try {
         await deps.formats.markStale(toKnown(repo))

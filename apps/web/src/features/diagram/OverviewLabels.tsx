@@ -106,7 +106,15 @@ export function FramesAndOverviewLabels({
   )
 }
 
-const cssString = (value: string) => `"${value.replace(/["\\]/g, '\\$&').replace(/\n/g, '\\a ')}"`
+/**
+ * A CSS string literal for any text. Quotes and backslashes are backslash-escaped; every control
+ * character is a hex escape, since CSS reads CR, FF and LF as newlines, which end a string.
+ */
+export const cssString = (value: string) =>
+  `"${value
+    .replace(/["\\]/g, '\\$&')
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: matching control characters is the point
+    .replace(/[\u0000-\u001f\u007f]/g, (char) => `\\${char.charCodeAt(0).toString(16)} `)}"`
 
 /**
  * The table names of the overview that no longer fit their card: the card's own name is hidden

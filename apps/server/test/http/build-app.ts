@@ -105,6 +105,7 @@ function common(
   const logger: CommonDeps['logger'] = {
     error: (details) => logged.push(details),
     warn: (details, message) => warned.push({ ...details, message }),
+    info: () => {},
   }
   const commitSchemas = makeCommitSchemas({
     gitHost,

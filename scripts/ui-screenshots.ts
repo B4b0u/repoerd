@@ -5,11 +5,12 @@
  *   Images land in apps/web/.screenshots/<label>/<lang>-<theme>-<screen>.png (git-ignored).
  * - The images of the README, in English (docs/images/):
  *     SCREENS_TARGET=readme SCREENS_BASE_URL=http://localhost:3300 pnpm exec tsx scripts/ui-screenshots.ts
- *   against a production server in fake mode with a fresh database (automatic layouts).
+ *   against a production server in fake mode with a fresh database (automatic layouts): the
+ *   script saves the proposed table groups for the team, stars and opens repositories first.
  */
 import { mkdir } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
-import { type Browser, chromium, type Page } from 'playwright'
+import { type Browser, type BrowserContextOptions, chromium, type Page } from 'playwright'
 
 const BASE_URL = process.env.SCREENS_BASE_URL ?? 'http://localhost:5180'
 const TARGET = process.env.SCREENS_TARGET ?? 'screens'
@@ -121,12 +122,24 @@ interface ReadmeShot {
   theme: 'dark' | 'light'
   /** Rearrange all tables first: the comparison adds tables to a layout saved on `main`, and they can overlap. */
   rearrange?: boolean
+  /** Centres the frames of these groups and zooms in on them: the whole schema fits only at a zoom where nothing reads. */
+  focus?: { groups: string[]; zoom: number }
 }
 
-/** The README images (spec §7.2), all from the acme/storefront showcase. */
+/** The README images (spec §7.2) of the acme/storefront showcase; the repository page comes last. */
 const README_SHOTS: ReadmeShot[] = [
-  { file: 'storefront-dark.png', path: '/acme/storefront', theme: 'dark' },
-  { file: 'storefront-light.png', path: '/acme/storefront', theme: 'light' },
+  {
+    file: 'storefront-dark.png',
+    path: '/acme/storefront',
+    theme: 'dark',
+    focus: { groups: ['orders', 'marketing'], zoom: 0.45 },
+  },
+  {
+    file: 'storefront-light.png',
+    path: '/acme/storefront',
+    theme: 'light',
+    focus: { groups: ['orders', 'marketing'], zoom: 0.45 },
+  },
   { file: 'table-detail.png', path: '/acme/storefront?active=orders', theme: 'dark' },
   {
     file: 'related-tables.png',
@@ -152,11 +165,13 @@ async function newContext(
   lang: 'en' | 'fr',
   theme: 'dark' | 'light',
   deviceScaleFactor = 1,
+  storageState?: BrowserContextOptions['storageState'],
 ) {
   const context = await browser.newContext({
     viewport: VIEWPORT,
     deviceScaleFactor,
     locale: lang === 'fr' ? 'fr-FR' : 'en-US',
+    storageState,
   })
   await context.addInitScript(
     (choice) => {
@@ -196,10 +211,91 @@ async function captureScreens(browser: Browser) {
   }
 }
 
+/** Starred and opened before the captures: the repository page shows its favourites and recents. */
+const FAVORITES = ['acme/storefront', 'acme/blog-drizzle']
+const OPENED = ['acme/crm', 'acme/blog-drizzle']
+
+/**
+ * The state the README shows: the storefront's proposed groups saved for the team (its first
+ * visit already laid the tables out by these groups), favourites, and repositories opened lately.
+ * Returns the browser storage the captures start from: another browser would be offered to lay
+ * the diagram out by group, which it already is.
+ */
+async function prepareReadme(browser: Browser) {
+  const context = await newContext(browser, 'en', 'dark')
+  const page = await context.newPage()
+  const open = (path: string) =>
+    page.goto(new URL(path, BASE_URL).href, { waitUntil: 'networkidle' })
+  await open('/acme/storefront')
+  // Let the first layout be placed and saved.
+  await page.waitForTimeout(1500)
+  await page.getByRole('button', { name: 'Save for the team' }).click()
+  await page.getByRole('button', { name: 'Save for the team' }).waitFor({ state: 'detached' })
+  for (const repo of OPENED) {
+    await open(`/${repo}`)
+    await page.waitForTimeout(1500)
+  }
+  await open('/')
+  for (const repo of FAVORITES) {
+    await page
+      .getByRole('button', { name: `Add ${repo} to favourites` })
+      .first()
+      .click()
+    await page.waitForTimeout(300)
+  }
+  const storage = await context.storageState()
+  await context.close()
+  return storage
+}
+
+/** Pans the frames of the groups to the middle of the canvas, then zooms in around them. */
+async function focusGroups(page: Page, groups: string[], zoom: number) {
+  const pane = await page.locator('.react-flow').boundingBox()
+  const frames = await Promise.all(
+    groups.map(async (group) => {
+      const id = await page
+        .locator('[data-label-of]', { hasText: new RegExp(`^${group}$`) })
+        .getAttribute('data-label-of')
+      const frame = await page.locator(`.group-frame[data-group-id="${id}"]`).boundingBox()
+      if (!frame) throw new Error(`No frame for the group ${group}`)
+      return frame
+    }),
+  )
+  if (!pane) throw new Error('No canvas')
+  const left = Math.min(...frames.map((frame) => frame.x))
+  const right = Math.max(...frames.map((frame) => frame.x + frame.width))
+  const top = Math.min(...frames.map((frame) => frame.y))
+  const bottom = Math.max(...frames.map((frame) => frame.y + frame.height))
+  const middle = { x: pane.x + pane.width / 2, y: pane.y + pane.height / 2 }
+  // An empty corner of the fitted view: dragging it pans without moving a table.
+  const grip = { x: pane.x + 60, y: pane.y + 60 }
+  await page.mouse.move(grip.x, grip.y)
+  await page.mouse.down()
+  await page.mouse.move(
+    grip.x + middle.x - (left + right) / 2,
+    grip.y + middle.y - (top + bottom) / 2,
+    { steps: 10 },
+  )
+  await page.mouse.up()
+  // The wheel zooms around the pointer: the frames stay in the middle.
+  await page.mouse.move(middle.x, middle.y)
+  const zoomText = page
+    .getByRole('button', { name: 'Zoom in' })
+    .locator('xpath=preceding-sibling::span[1]')
+  while (Number.parseInt((await zoomText.textContent()) ?? '0', 10) / 100 < zoom) {
+    await page.mouse.wheel(0, -40)
+    await page.waitForTimeout(50)
+  }
+  // A hovered table highlights its links and dims the others: leave the pointer on the header.
+  await page.mouse.move(middle.x, 20)
+  await page.waitForTimeout(500)
+}
+
 async function captureReadme(browser: Browser) {
   await mkdir(README_DIR, { recursive: true })
+  const storage = await prepareReadme(browser)
   for (const shot of README_SHOTS) {
-    const context = await newContext(browser, 'en', shot.theme, 2)
+    const context = await newContext(browser, 'en', shot.theme, 2, storage)
     const page = await context.newPage()
     await page.goto(new URL(shot.path, BASE_URL).href, { waitUntil: 'networkidle' })
     // The first visit places the tables (ELK) and saves the layout: let it settle.
@@ -209,10 +305,27 @@ async function captureReadme(browser: Browser) {
       await page.getByRole('button', { name: 'Rearrange', exact: true }).click()
       await page.waitForTimeout(2000)
     }
+    if (shot.focus) await focusGroups(page, shot.focus.groups, shot.focus.zoom)
     await page.screenshot({ path: fileURLToPath(new URL(shot.file, README_DIR)) })
     console.log(`docs/images/${shot.file}`)
     await context.close()
   }
+  await captureRepositories(browser)
+}
+
+/** The repository page, once the format of every repository is detected. */
+async function captureRepositories(browser: Browser) {
+  const context = await newContext(browser, 'en', 'dark', 2)
+  const page = await context.newPage()
+  await page.goto(new URL('/', BASE_URL).href, { waitUntil: 'networkidle' })
+  await page
+    .getByText('Detecting the schema…')
+    .first()
+    .waitFor({ state: 'detached', timeout: 60_000 })
+  await page.waitForTimeout(500)
+  await page.screenshot({ path: fileURLToPath(new URL('repositories.png', README_DIR)) })
+  console.log('docs/images/repositories.png')
+  await context.close()
 }
 
 const browser = await chromium.launch()
