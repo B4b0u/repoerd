@@ -3,8 +3,8 @@
 # Serve it behind a reverse proxy that terminates HTTPS, then open https://<your host>/setup.
 services:
   repoerd:
-    # The 0.1 line: patch releases only. Change it on purpose to upgrade (back up first).
-    image: ghcr.io/b4b0u/repoerd:0.1
+    # The 0.2 line: patch releases only. Change it on purpose to upgrade (back up first).
+    image: ghcr.io/b4b0u/repoerd:0.2
     restart: unless-stopped
     ports:
       # Loopback only: a reverse proxy on this host reaches it. Change it if the proxy runs elsewhere.
