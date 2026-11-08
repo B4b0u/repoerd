@@ -6,6 +6,7 @@ All notable changes to RepoERD are documented here. The format follows [Keep a C
 
 ### Added
 
+- A new repository page: favourites and the repositories you opened last as cards at the top, the schema format of each repository (Prisma or Drizzle, detected in the background, stored and checked again after a push), the list grouped by organisation, and a "With a schema" filter, on by default, that hides repositories without one until you ask to see them all.
 - Table groups, shared by the team: groups are proposed from the schema files (one per domain folder, else per file, else per Postgres schema), then saved, ignored or proposed again by anyone with push access. Groups are edited on the diagram: rename, recolour (12 colours or a custom one), delete, place tables from their details or by selecting several with Shift, with "Undo". A group moves by dragging its label. Frames and coloured cards on the diagram, the table list by group, and an automatic layout by group.
 - The file that declares each table, shown in its details.
 
