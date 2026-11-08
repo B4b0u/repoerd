@@ -245,6 +245,7 @@ export function makeRepoFormatSync(deps: RepoFormatSyncDeps): RepoFormatSync {
         return
       }
       await deps.formats.save(target, { format, commitSha, checkedAt })
+      truncatedUntil.delete(key)
       if (staleWhileRunning.has(key)) await deps.formats.markStale(target)
     } catch (error) {
       if (error instanceof GitHubRateLimitedError) {
@@ -284,7 +285,11 @@ export function makeRepoFormatSync(deps: RepoFormatSyncDeps): RepoFormatSync {
       ]
       for (const repo of ordered) {
         const key = repoKey(repo)
-        if ((truncatedUntil.get(key) ?? 0) > now.getTime()) continue
+        const backedOffUntil = truncatedUntil.get(key)
+        if (backedOffUntil !== undefined) {
+          if (backedOffUntil > now.getTime()) continue
+          truncatedUntil.delete(key)
+        }
         if (needsCheck(stored.get(key), failures.get(key), repo, now))
           enqueue(repo, priority.has(key))
       }
@@ -302,6 +307,8 @@ export function makeRepoFormatSync(deps: RepoFormatSyncDeps): RepoFormatSync {
     },
 
     async record(repo, commitSha, detected, checkedAt) {
+      // A detection was made anyway: the back-off no longer applies.
+      truncatedUntil.delete(repoKey(repo))
       try {
         await deps.formats.save(toKnown(repo), {
           format: repoFormatOf(detected),
@@ -318,6 +325,8 @@ export function makeRepoFormatSync(deps: RepoFormatSyncDeps): RepoFormatSync {
 
     async markStale(repo) {
       const key = repoKey(repo)
+      // The sources changed: the next check may find what the truncated tree hid.
+      truncatedUntil.delete(key)
       if (running.has(key)) staleWhileRunning.add(key)
       try {
         await deps.formats.markStale(toKnown(repo))

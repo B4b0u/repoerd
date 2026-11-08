@@ -452,6 +452,54 @@ describe('repository format sync', () => {
     })
   })
 
+  describe('the back-off of a truncated tree', () => {
+    async function backedOff() {
+      const w = world(['a'], { truncated: true, formats: { a: 'none' } })
+      await w.known()
+      await w.sync.idle()
+      w.advance(2 * HOUR)
+      await w.known()
+      await w.sync.idle()
+      expect(w.detections.calls).toEqual(['a'])
+      return w
+    }
+
+    it('ends when the manual sources change', async () => {
+      const w = await backedOff()
+      await w.sync.markStale(w.byName('a'))
+      await w.known()
+      await w.sync.idle()
+      expect(w.detections.calls).toEqual(['a', 'a'])
+    })
+
+    it('ends when a detection is recorded', async () => {
+      const w = await backedOff()
+      const repo = w.byName('a')
+      await w.sync.record(repo, 'sha', [], w.formats.rows.get(repoKey(repo))?.checkedAt ?? NOW)
+      w.advance(2 * HOUR)
+      await w.formats.markStale(repo)
+      await w.known()
+      await w.sync.idle()
+      expect(w.detections.calls).toEqual(['a', 'a'])
+    })
+
+    it('is removed once expired, so a later truncated result sets a fresh one', async () => {
+      const w = await backedOff()
+      w.advance(23 * HOUR)
+      await w.known()
+      await w.sync.idle()
+      expect(w.detections.calls).toEqual(['a', 'a'])
+      w.advance(2 * HOUR)
+      await w.known()
+      await w.sync.idle()
+      expect(w.detections.calls).toEqual(['a', 'a'])
+      w.advance(23 * HOUR)
+      await w.known()
+      await w.sync.idle()
+      expect(w.detections.calls).toEqual(['a', 'a', 'a'])
+    })
+  })
+
   it('survives a database that fails during a check', async () => {
     const w = world(['a', 'b'], { concurrency: 1 })
     await w.known()
