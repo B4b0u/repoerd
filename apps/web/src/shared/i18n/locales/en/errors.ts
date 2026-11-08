@@ -63,5 +63,6 @@ export const errors = {
     'invalid-groups': 'These table groups were refused. Reload the page and try again.',
     'invalid-compare': 'This comparison is not valid: choose two different branches.',
     'invalid-branch-name': 'This is not a valid branch name.',
+    'too-many-favorites': 'Too many favorites: the limit is {{max}} repositories.',
   } satisfies Record<ApiErrorReason, string>,
 }

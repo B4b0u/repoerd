@@ -4,6 +4,7 @@ import type {
   DisplayMode,
   ManualSource,
   RepoRef,
+  RepoSchemaFormat,
   SchemaFailure,
   SchemaFormat,
   SourceProblem,
@@ -109,6 +110,24 @@ export interface RepoDto {
   name: string
   defaultBranch: string
   private: boolean
+  favorite: boolean
+  /** ISO date of the user's last visit; null when never opened (or forgotten). */
+  lastOpenedAt: string | null
+  ownerAvatarUrl: string | null
+  /** The schema format detection found; null while never detected. */
+  format: RepoFormatDto | null
+  /** Never detected, and queued or running. */
+  formatPending: boolean
+}
+
+export interface RepoFormatDto {
+  kind: RepoSchemaFormat
+  /** ISO date of the detection. */
+  checkedAt: string
+}
+
+export interface RepoFormatsResponse {
+  formats: { owner: string; name: string; format: RepoFormatDto | null; formatPending: boolean }[]
 }
 
 export interface RepoListResponse {
@@ -316,6 +335,8 @@ export type ApiErrorReason =
   | 'invalid-groups'
   | 'invalid-compare'
   | 'invalid-branch-name'
+  /** Of a favourite refused: `details.max`. */
+  | 'too-many-favorites'
 
 /** The reason, and the values the message is about (branch, login, source name, path, limit…). */
 export interface ApiErrorDetails {
@@ -354,6 +375,10 @@ export const apiPaths = {
   repos: '/api/repos',
   /** The repository list reloaded from GitHub (at most once a minute per user). */
   reposRefresh: '/api/repos?refresh=1',
+  /** The detected formats of the user's repositories, polled while some are pending. */
+  repoFormats: '/api/repo-formats',
+  /** PUT adds, DELETE removes (both 204). */
+  favorite: (repo: RepoRef) => `${repoPath(repo)}/favorite`,
   branches: (repo: RepoRef) => `${repoPath(repo)}/branches`,
   schema: (repo: RepoRef, params: { branch?: string; source?: string } = {}) =>
     withQuery(`${repoPath(repo)}/schema`, params),

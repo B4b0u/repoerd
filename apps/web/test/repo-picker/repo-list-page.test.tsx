@@ -14,8 +14,28 @@ afterEach(() => {
 
 const REPOS: RepoListResponse = {
   repos: [
-    { owner: 'acme', name: 'shop', defaultBranch: 'main', private: true },
-    { owner: 'acme', name: 'blog', defaultBranch: 'trunk', private: false },
+    {
+      owner: 'acme',
+      name: 'shop',
+      defaultBranch: 'main',
+      private: true,
+      favorite: false,
+      lastOpenedAt: null,
+      ownerAvatarUrl: null,
+      format: null,
+      formatPending: false,
+    },
+    {
+      owner: 'acme',
+      name: 'blog',
+      defaultBranch: 'trunk',
+      private: false,
+      favorite: false,
+      lastOpenedAt: null,
+      ownerAvatarUrl: null,
+      format: null,
+      formatPending: false,
+    },
   ],
 }
 

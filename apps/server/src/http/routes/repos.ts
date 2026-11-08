@@ -114,7 +114,16 @@ export function registerRepoRoutes(app: AppHono, deps: AppDeps) {
       refresh: c.req.query('refresh') === '1',
     })
     if (!result.ok) return accessError(c, result.error)
-    return c.json({ repos: result.value } satisfies RepoListResponse)
+    // Favourites, visits and detected formats arrive with the repo picker's server tasks.
+    const repos = result.value.map((repo) => ({
+      ...repo,
+      favorite: false,
+      lastOpenedAt: null,
+      ownerAvatarUrl: null,
+      format: null,
+      formatPending: false,
+    }))
+    return c.json({ repos } satisfies RepoListResponse)
   })
 
   app.get('/api/repos/:owner/:repo/branches', async (c) => {

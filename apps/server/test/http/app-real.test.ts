@@ -37,7 +37,19 @@ describe('HTTP API (real mode)', () => {
       mode: 'real',
     })
     expect(await (await app.request('/api/repos', { headers: { cookie } })).json()).toEqual({
-      repos: [{ owner: 'acme', name: 'shop', defaultBranch: 'main', private: false }],
+      repos: [
+        {
+          owner: 'acme',
+          name: 'shop',
+          defaultBranch: 'main',
+          private: false,
+          favorite: false,
+          lastOpenedAt: null,
+          ownerAvatarUrl: null,
+          format: null,
+          formatPending: false,
+        },
+      ],
     })
   })
 

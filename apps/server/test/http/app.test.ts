@@ -77,7 +77,19 @@ describe('HTTP API (fake mode)', () => {
   it('lists the visible repositories', async () => {
     const { app } = buildFakeModeApp()
     expect(await (await app.request('/api/repos')).json()).toEqual({
-      repos: [{ owner: 'acme', name: 'shop', defaultBranch: 'main', private: false }],
+      repos: [
+        {
+          owner: 'acme',
+          name: 'shop',
+          defaultBranch: 'main',
+          private: false,
+          favorite: false,
+          lastOpenedAt: null,
+          ownerAvatarUrl: null,
+          format: null,
+          formatPending: false,
+        },
+      ],
     })
   })
 

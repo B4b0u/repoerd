@@ -7,6 +7,11 @@ const repo = (owner: string, name: string): RepoDto => ({
   name,
   defaultBranch: 'main',
   private: false,
+  favorite: false,
+  lastOpenedAt: null,
+  ownerAvatarUrl: null,
+  format: null,
+  formatPending: false,
 })
 const repos = [repo('acme', 'shop-prisma'), repo('acme', 'blog-drizzle'), repo('Globex', 'Billing')]
 
