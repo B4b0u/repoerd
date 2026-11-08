@@ -4,6 +4,7 @@ import type {
   DisplayMode,
   GroupOrigin,
   ManualSource,
+  RepoSchemaFormat,
 } from '@repoerd/model'
 import { sql } from 'drizzle-orm'
 import { index, integer, primaryKey, real, sqliteTable, text } from 'drizzle-orm/sqlite-core'
@@ -185,3 +186,39 @@ export const tableGroupAssignments = sqliteTable(
   },
   (table) => [primaryKey({ columns: [table.repo, table.sourceId, table.tableName] })],
 )
+
+export const userFavoriteRepos = sqliteTable(
+  'user_favorite_repos',
+  {
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    /** The repository's GitHub id. */
+    repo: text('repo').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.repo] })],
+)
+
+export const userRepoVisits = sqliteTable(
+  'user_repo_visits',
+  {
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    repo: text('repo').notNull(),
+    visitedAt: integer('visited_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.repo] })],
+)
+
+/** The detected schema format of a repository, shared by every user (no schema content). */
+export const repoFormats = sqliteTable('repo_formats', {
+  repo: text('repo').primaryKey(),
+  /** null: a detection failed before any format was ever stored. */
+  format: text('format').$type<RepoSchemaFormat>(),
+  commitSha: text('commit_sha'),
+  checkedAt: integer('checked_at', { mode: 'timestamp_ms' }).notNull(),
+  failedAt: integer('failed_at', { mode: 'timestamp_ms' }),
+  stale: integer('stale', { mode: 'boolean' }).notNull().default(false),
+})
