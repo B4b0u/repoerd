@@ -31,9 +31,9 @@ All notable changes to RepoERD are documented here. The format follows [Keep a C
 
 ### Upgrade notes
 
-- **Back up the database first** (see "Backups and upgrades" in the README). Migrations 0008 (table groups) and 0009 (favourites, visits and repository formats) run at start-up and cannot be undone: a 0.1 image does not run on the migrated database.
+- **Back up the database first** (see "Backups and upgrades" in the README). Migrations 0008 (table groups) and 0009 (favourites, visits and repository formats) run at start-up and cannot be undone, and going back to 0.1 is not supported: restore the backup taken before the upgrade.
 - The cached detections and parsed schemas of 0.1 are deleted at the first start (cache version 3 → 6) and parsed again the first time each diagram is opened, so first openings take longer.
-- The first repository list starts a background check of the schema format of every repository, with the installation token, 2 repositories at a time and at most 200 per hour. On a large installation the formats fill in over several hours; meanwhile the repositories not yet checked show "Detecting the schema…" and stay visible with the "With a schema" filter. Opening the diagram of a default branch records its format at once.
+- The first repository list starts a background check of the schema format of every repository, with the installation token, 2 repositories at a time and at most 200 per hour. On a large installation the formats fill in over several hours; meanwhile the repositories not yet checked show "Detecting the schema…" and stay visible with the "With a schema" filter. Opening the diagram of a default branch records its format at once (unless GitHub truncates its tree).
 
 ## [0.1.0] - 2026-10-12
 
