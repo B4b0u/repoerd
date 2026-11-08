@@ -28,4 +28,26 @@ describe('repoFormatOf', () => {
       repoFormatOf([detected('drizzle', { kind: 'file-too-complex', path: 'schema.ts' })]),
     ).toBe('drizzle')
   })
+
+  const mysql: DetectedSource['problem'] = {
+    kind: 'unsupported-dialect',
+    configPath: 'drizzle.config.ts',
+    dialect: 'mysql',
+  }
+
+  it('ignores a source whose config targets another database', () => {
+    expect(repoFormatOf([detected('drizzle', mysql)])).toBe('none')
+  })
+
+  it('ignores an unsupported-dialect source next to a readable one', () => {
+    expect(repoFormatOf([detected('drizzle', mysql), detected('prisma')])).toBe('prisma')
+  })
+
+  it('still counts a source whose config cannot be read', () => {
+    expect(
+      repoFormatOf([
+        detected('drizzle', { kind: 'drizzle-config-unreadable', configPath: 'drizzle.config.ts' }),
+      ]),
+    ).toBe('drizzle')
+  })
 })
