@@ -25,10 +25,17 @@ RUN pnpm build \
  && grep -q '^// Modified by RepoERD' /out/server/node_modules/.pnpm/@liam-hq+schema@0.6.1_*/node_modules/@liam-hq/schema/dist/parser/drizzle/postgres/tableParser.js \
  && rm -rf apps/web/dist/.vite
 # Trim what is not needed at run time (done here so the final image never carries it).
+# better-sqlite3 13 loads prebuilds/<platform>-<arch>.node (lib/binding.js); each platform's build runs this RUN
+# natively, so only the binary of the platform being built is kept (the others weigh about 14 MB).
 RUN find /out/server/node_modules -type f \( -name '*.d.ts' -o -name '*.d.mts' -o -name '*.d.cts' -o -name '*.map' \) -not -path '*/typescript@*' -delete \
  && rm -rf /out/server/node_modules/.pnpm/better-sqlite3@*/node_modules/better-sqlite3/deps \
            /out/server/node_modules/.pnpm/better-sqlite3@*/node_modules/better-sqlite3/src \
- && rm -rf /out/server/node_modules/.pnpm/typescript@*
+ && rm -rf /out/server/node_modules/.pnpm/typescript@* \
+ && target="$(node -p "process.platform + '-' + process.arch")" \
+ && for dir in /out/server/node_modules/.pnpm/better-sqlite3@*/node_modules/better-sqlite3/prebuilds; do \
+      if [ -d "$dir" ]; then find "$dir" -type f -name '*.node' ! -name "$target.node" -delete; fi; \
+    done \
+ && ls /out/server/node_modules/.pnpm/better-sqlite3@*/node_modules/better-sqlite3/prebuilds/"$target.node"
 
 FROM node:24-slim@sha256:a5f4366e834695d5f363b920c104953a535d3a9864d1bdf74566a0ebe01daee5
 ARG REPOERD_VERSION=dev
