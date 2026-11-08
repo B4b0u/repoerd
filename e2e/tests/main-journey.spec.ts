@@ -16,7 +16,10 @@ test('a moved table keeps its position after a reload', async ({ page }) => {
       response.url().includes('/layout') &&
       response.ok(),
   )
-  await page.getByRole('link', { name: /blog-drizzle/ }).click()
+  await page
+    .getByRole('region', { name: 'All repositories' })
+    .getByRole('link', { name: 'acme/blog-drizzle', exact: true })
+    .click()
   await expect(page).toHaveURL(/\/acme\/blog-drizzle/)
 
   const posts = page.locator('.react-flow__node[data-id="posts"]')
