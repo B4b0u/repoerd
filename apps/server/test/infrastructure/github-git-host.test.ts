@@ -91,6 +91,17 @@ describe('GitHubGitHost', () => {
     expect(await host.resolveBranch(repo, 'missing')).toBeNull()
   })
 
+  it('reads no branch in an empty repository (GitHub answers 409)', async () => {
+    server.use(
+      ...installationHandlers(['acme/shop']),
+      http.get('https://api.github.com/repos/acme/shop/git/ref/*', () =>
+        HttpResponse.json({ message: 'Git Repository is empty.' }, { status: 409 }),
+      ),
+    )
+    const { host } = gitHost()
+    expect(await host.resolveBranch(repo, 'main')).toBeNull()
+  })
+
   it('encodes literal % and # in branch names', async () => {
     const paths: string[] = []
     server.use(

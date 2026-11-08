@@ -4,6 +4,10 @@ import type { RepoSummary } from './git-host.js'
 export interface AccessibleRepo extends RepoSummary {
   /** The user may push to the repository (needed to edit its settings, plan 3b). */
   canWrite: boolean
+  /** GitHub `pushed_at` (ISO); null for a repository never pushed to. */
+  pushedAt: string | null
+  /** GitHub `owner.avatar_url`; null when unknown. */
+  ownerAvatarUrl: string | null
 }
 
 export interface RepoAccessSnapshot {

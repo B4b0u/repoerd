@@ -66,5 +66,6 @@ export const errors: Catalog['errors'] = {
     'invalid-groups': 'Ces groupes de tables ont été refusés. Rechargez la page et réessayez.',
     'invalid-compare': 'Cette comparaison est invalide : choisissez deux branches différentes.',
     'invalid-branch-name': "Ce nom de branche n'est pas valide.",
+    'too-many-favorites': 'Trop de favoris : la limite est de {{max}} dépôts.',
   },
 }

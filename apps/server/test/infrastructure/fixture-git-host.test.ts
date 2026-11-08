@@ -4,6 +4,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
+  FIXTURE_PUSHED_AT,
   FixtureGitHost,
   fixtureRepoId,
   gitBlobSha,
@@ -107,7 +108,35 @@ describe('FixtureRepoDirectory', () => {
       defaultBranch: 'main',
       private: false,
       canWrite: true,
+      pushedAt: FIXTURE_PUSHED_AT,
+      ownerAvatarUrl: null,
     })
+  })
+
+  it('gives the repository a fixed last push and no owner avatar', async () => {
+    const snapshot = await new FixtureRepoDirectory(host).forUser()
+    const storefront = snapshot.repos.find((repo) => repo.name === 'storefront')
+    expect(storefront?.pushedAt).toBe(FIXTURE_PUSHED_AT)
+    expect(storefront?.ownerAvatarUrl).toBeNull()
+  })
+
+  it('reads the last push from the pushedAt of repo.json', async () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'repoerd-pushed-'))
+    try {
+      mkdirSync(path.join(root, 'o', 'r', 'main'), { recursive: true })
+      writeFileSync(
+        path.join(root, 'o', 'r', 'repo.json'),
+        JSON.stringify({
+          defaultBranch: 'main',
+          branches: { main: 'main' },
+          pushedAt: '2026-05-05T05:05:05.000Z',
+        }),
+      )
+      const snapshot = await new FixtureRepoDirectory(new FixtureGitHost(root)).forUser()
+      expect(snapshot.repos[0]?.pushedAt).toBe('2026-05-05T05:05:05.000Z')
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
   })
 })
 

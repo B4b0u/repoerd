@@ -6,6 +6,7 @@ import type { GitHost } from './application/ports/git-host.js'
 import type { RepoDirectory } from './application/ports/repo-directory.js'
 import { makeBlobReader } from './application/services/blob-reader.js'
 import { makeCommitSchemas } from './application/services/commit-schemas.js'
+import { makeRepoFormatSync } from './application/services/repo-format-sync.js'
 import { makeAdmin } from './application/use-cases/admin.js'
 import { makeAuth, makeUserAccessToken } from './application/use-cases/auth.js'
 import { makeCompareBranchSchemas } from './application/use-cases/compare-branch-schemas.js'
@@ -14,6 +15,7 @@ import { makeGetLayout, makeSaveTablePositions } from './application/use-cases/l
 import { makeListBranches } from './application/use-cases/list-branches.js'
 import { makeReplaceApp } from './application/use-cases/replace-app.js'
 import { makeRepoAccess } from './application/use-cases/repo-access.js'
+import { makeRepoList } from './application/use-cases/repo-list.js'
 import { makeRepoSettings } from './application/use-cases/repo-settings.js'
 import { makeSetup } from './application/use-cases/setup.js'
 import { makeTableGroups } from './application/use-cases/table-groups.js'
@@ -35,14 +37,17 @@ import { InstallationTokens } from './infrastructure/github/installation-tokens.
 import { purgeCaches } from './infrastructure/persistence/cache-retention.js'
 import { openDatabase, pingDatabase } from './infrastructure/persistence/database.js'
 import { SqliteBlobCache } from './infrastructure/persistence/sqlite-blob-cache.js'
+import { SqliteFavoriteRepository } from './infrastructure/persistence/sqlite-favorite-repository.js'
 import { SqliteInstanceConfigRepository } from './infrastructure/persistence/sqlite-instance-config-repository.js'
 import { SqliteLayoutRepository } from './infrastructure/persistence/sqlite-layout-repository.js'
 import { SqliteLegacyRepoKeys } from './infrastructure/persistence/sqlite-legacy-repo-keys.js'
+import { SqliteRepoFormatRepository } from './infrastructure/persistence/sqlite-repo-format-repository.js'
 import { SqliteRepoSettingsRepository } from './infrastructure/persistence/sqlite-repo-settings-repository.js'
 import { SqliteSchemaCache } from './infrastructure/persistence/sqlite-schema-cache.js'
 import { SqliteSessionRepository } from './infrastructure/persistence/sqlite-session-repository.js'
 import { SqliteTableGroupRepository } from './infrastructure/persistence/sqlite-table-group-repository.js'
 import { SqliteUserRepository } from './infrastructure/persistence/sqlite-user-repository.js'
+import { SqliteVisitRepository } from './infrastructure/persistence/sqlite-visit-repository.js'
 import { schemaCoreToolkit } from './infrastructure/schema/schema-core-toolkit.js'
 import { makeShutdown } from './shutdown.js'
 import {
@@ -81,6 +86,9 @@ async function main() {
   const layouts = new SqliteLayoutRepository(db)
   const repoSettings = new SqliteRepoSettingsRepository(db)
   const tableGroups = new SqliteTableGroupRepository(db)
+  const favorites = new SqliteFavoriteRepository(db)
+  const visits = new SqliteVisitRepository(db)
+  const repoFormats = new SqliteRepoFormatRepository(db)
   // Rows saved by repository name before plan 6d move to the repository's id on access.
   const legacyKeys = new SqliteLegacyRepoKeys(db)
   const schemaCache = new SqliteSchemaCache(db)
@@ -109,15 +117,32 @@ async function main() {
       schemaCache,
       readBlobs: makeBlobReader({ gitHost, blobCache }),
     })
+    // One per mode: the background format checks share the parses and the detection cache.
+    const formatSync = makeRepoFormatSync({
+      formats: repoFormats,
+      gitHost,
+      settings: repoSettings,
+      commitSchemas,
+      logger,
+      now,
+    })
+    const repoAccess = makeRepoAccess({
+      directory,
+      config: instanceConfig,
+      enforceAllowedOrgs,
+      legacyKeys,
+    })
     return {
-      repoAccess: makeRepoAccess({
-        directory,
-        config: instanceConfig,
-        enforceAllowedOrgs,
-        legacyKeys,
-      }),
+      repoAccess,
+      repoList: makeRepoList({ repoAccess, favorites, visits, formats: formatSync, now, logger }),
       listBranches: makeListBranches({ gitHost }),
-      getBranchSchema: makeGetBranchSchema({ gitHost, settings: repoSettings, commitSchemas }),
+      getBranchSchema: makeGetBranchSchema({
+        gitHost,
+        settings: repoSettings,
+        commitSchemas,
+        now: () => now().getTime(),
+        onDefaultBranchDetected: formatSync.record,
+      }),
       compareBranchSchemas: makeCompareBranchSchemas({
         gitHost,
         settings: repoSettings,
@@ -125,7 +150,10 @@ async function main() {
       }),
       getLayout: makeGetLayout({ layouts }),
       saveTablePositions: makeSaveTablePositions({ layouts }),
-      repoSettings: makeRepoSettings({ settings: repoSettings }),
+      repoSettings: makeRepoSettings({
+        settings: repoSettings,
+        onSourcesSaved: formatSync.markStale,
+      }),
       tableGroups: makeTableGroups({ groups: tableGroups }),
       admin: makeAdmin({ config: instanceConfig, users, directory, sessions, now }),
       logger,

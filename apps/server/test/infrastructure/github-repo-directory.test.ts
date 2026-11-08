@@ -72,6 +72,8 @@ describe('GitHubRepoDirectory', () => {
           defaultBranch: 'main',
           private: true,
           canWrite: true,
+          pushedAt: null,
+          ownerAvatarUrl: null,
         },
         {
           id: 12,
@@ -80,6 +82,8 @@ describe('GitHubRepoDirectory', () => {
           defaultBranch: 'trunk',
           private: false,
           canWrite: false,
+          pushedAt: null,
+          ownerAvatarUrl: null,
         },
       ],
     }
@@ -92,6 +96,50 @@ describe('GitHubRepoDirectory', () => {
     // Past the TTL the previous list answers at once and is refreshed behind it.
     expect(await directory.forUser('1')).toEqual(expected)
     await vi.waitFor(() => expect(counter.requests).toBe(6))
+  })
+
+  it('reads the last push and the owner avatar, null when GitHub gives none', async () => {
+    server.use(
+      http.get('https://api.github.com/user/installations', () =>
+        HttpResponse.json({
+          total_count: 1,
+          installations: [{ id: 1, account: { login: 'acme' } }],
+        }),
+      ),
+      http.get('https://api.github.com/user/installations/:id/repositories', () =>
+        HttpResponse.json({
+          total_count: 2,
+          repositories: [
+            {
+              id: 21,
+              name: 'pushed',
+              owner: { login: 'acme', avatar_url: 'https://avatars.githubusercontent.com/u/1?v=4' },
+              default_branch: 'main',
+              private: false,
+              pushed_at: '2026-11-01T10:00:00Z',
+            },
+            {
+              id: 22,
+              name: 'empty',
+              owner: { login: 'acme' },
+              default_branch: 'main',
+              private: false,
+              pushed_at: null,
+            },
+          ],
+        }),
+      ),
+    )
+    const directory = new GitHubRepoDirectory({
+      api,
+      logger: quiet,
+      accessToken: async () => 'ghu_1',
+    })
+    const snapshot = await directory.forUser('1')
+    expect(snapshot?.repos.map((r) => [r.name, r.pushedAt, r.ownerAvatarUrl])).toEqual([
+      ['pushed', '2026-11-01T10:00:00Z', 'https://avatars.githubusercontent.com/u/1?v=4'],
+      ['empty', null, null],
+    ])
   })
 
   it('shares the in-flight load between concurrent cache misses of one user', async () => {

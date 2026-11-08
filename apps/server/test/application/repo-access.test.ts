@@ -31,8 +31,8 @@ describe('repository access', () => {
     expect(await access.listRepositories('1')).toEqual({
       ok: true,
       value: [
-        { owner: 'Acme', name: 'alpha', defaultBranch: 'main', private: false },
-        { owner: 'acme', name: 'Zeta', defaultBranch: 'main', private: false },
+        expect.objectContaining({ owner: 'Acme', name: 'alpha', canWrite: true }),
+        expect.objectContaining({ owner: 'acme', name: 'Zeta', canWrite: false }),
       ],
     })
   })

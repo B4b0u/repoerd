@@ -8,6 +8,7 @@ const LAYOUT = '/api/repos/acme/shop/layout?source=prisma%2Fschema.prisma&mode=A
 const GROUPS = '/api/repos/acme/shop/groups?source=prisma%2Fschema.prisma'
 const GROUP = '/api/repos/acme/shop/groups/billing?source=prisma%2Fschema.prisma'
 const ASSIGNMENTS = '/api/repos/acme/shop/groups-assignments?source=prisma%2Fschema.prisma'
+const FAVORITE = '/api/repos/acme/shop/favorite'
 
 /** Every mutating /api route of the real mode: its registered pattern and a path it answers. */
 const ROUTES = [
@@ -36,6 +37,8 @@ const ROUTES = [
   { method: 'PUT', pattern: '/api/repos/:owner/:repo/groups/:groupId', path: GROUP },
   { method: 'DELETE', pattern: '/api/repos/:owner/:repo/groups/:groupId', path: GROUP },
   { method: 'PATCH', pattern: '/api/repos/:owner/:repo/groups-assignments', path: ASSIGNMENTS },
+  { method: 'PUT', pattern: '/api/repos/:owner/:repo/favorite', path: FAVORITE },
+  { method: 'DELETE', pattern: '/api/repos/:owner/:repo/favorite', path: FAVORITE },
 ]
 
 /** A configured instance and the cookie of a signed-in administrator. */

@@ -3,6 +3,7 @@ import {
   type DetectedSource,
   type ManualSource,
   originKey,
+  type RepoSchemaFormat,
   TABLE_GROUP_LIMITS,
   type TableGroup,
   type TableGroupConfig,
@@ -18,6 +19,13 @@ import type {
   LayoutRepository,
   LayoutScope,
 } from '../../src/application/ports/layout-repository.js'
+import {
+  type FavoriteRepository,
+  MAX_FAVORITES,
+  type RepoFormatRepository,
+  type StoredRepoFormat,
+  type VisitRepository,
+} from '../../src/application/ports/repo-picker.js'
 import type { RepoSettingsRepository } from '../../src/application/ports/repo-settings.js'
 import type { SchemaCache } from '../../src/application/ports/schema-cache.js'
 import type {
@@ -343,5 +351,105 @@ export class InMemorySessionRepository implements SessionRepository {
       counts.set(session.userId, (counts.get(session.userId) ?? 0) + 1)
     }
     return counts
+  }
+}
+
+export class InMemoryFavorites implements FavoriteRepository {
+  readonly byUser = new Map<string, Set<string>>()
+
+  async list(userId: string) {
+    return new Set(this.byUser.get(userId) ?? [])
+  }
+  async add(userId: string, repo: KnownRepo, _now: Date) {
+    const keys = this.byUser.get(userId) ?? new Set<string>()
+    if (!keys.has(repoKey(repo)) && keys.size >= MAX_FAVORITES) return 'limit' as const
+    keys.add(repoKey(repo))
+    this.byUser.set(userId, keys)
+    return 'added' as const
+  }
+  async remove(userId: string, repo: KnownRepo) {
+    this.byUser.get(userId)?.delete(repoKey(repo))
+  }
+}
+
+export class InMemoryVisits implements VisitRepository {
+  readonly byUser = new Map<string, Map<string, Date>>()
+  /** Makes the next `record` fail (the route must still answer). */
+  failNext = false
+
+  async record(userId: string, repo: KnownRepo, at: Date) {
+    if (this.failNext) {
+      this.failNext = false
+      throw new Error('disk full')
+    }
+    const visits = this.byUser.get(userId) ?? new Map<string, Date>()
+    visits.set(repoKey(repo), at)
+    this.byUser.set(userId, visits)
+  }
+  async list(userId: string) {
+    return new Map(this.byUser.get(userId) ?? [])
+  }
+}
+
+/** Same rules as SqliteRepoFormatRepository; a row without `format` is a never-detected failure. */
+export class InMemoryRepoFormats implements RepoFormatRepository {
+  readonly rows = new Map<
+    string,
+    Omit<StoredRepoFormat, 'format'> & { format: RepoSchemaFormat | null }
+  >()
+  /** Makes every call throw (a database error). */
+  broken = false
+
+  private check() {
+    if (this.broken) throw new Error('database is locked')
+  }
+
+  async getMany(keys: readonly string[]) {
+    this.check()
+    const found = new Map<string, StoredRepoFormat>()
+    for (const key of keys) {
+      const row = this.rows.get(key)
+      if (row?.format) found.set(key, { ...row, format: row.format })
+    }
+    return found
+  }
+  async save(
+    repo: KnownRepo,
+    value: { format: RepoSchemaFormat; commitSha: string | null; checkedAt: Date },
+  ) {
+    this.check()
+    this.rows.set(repoKey(repo), { ...value, failedAt: null, stale: false })
+  }
+  async touch(repo: KnownRepo, checkedAt: Date) {
+    this.check()
+    const row = this.rows.get(repoKey(repo))
+    if (row) row.checkedAt = checkedAt
+  }
+  async markFailed(repo: KnownRepo, at: Date) {
+    this.check()
+    const row = this.rows.get(repoKey(repo))
+    if (row) row.failedAt = at
+    else
+      this.rows.set(repoKey(repo), {
+        format: null,
+        commitSha: null,
+        checkedAt: at,
+        failedAt: at,
+        stale: false,
+      })
+  }
+  async getFailures(keys: readonly string[]) {
+    this.check()
+    const failures = new Map<string, Date>()
+    for (const key of keys) {
+      const failedAt = this.rows.get(key)?.failedAt
+      if (failedAt) failures.set(key, failedAt)
+    }
+    return failures
+  }
+  async markStale(repo: KnownRepo) {
+    this.check()
+    const row = this.rows.get(repoKey(repo))
+    if (row) row.stale = true
   }
 }

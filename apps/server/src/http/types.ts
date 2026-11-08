@@ -7,6 +7,7 @@ import type { GetLayout, SaveTablePositions } from '../application/use-cases/lay
 import type { ListBranches } from '../application/use-cases/list-branches.js'
 import type { ReplaceApp } from '../application/use-cases/replace-app.js'
 import type { RepoAccess } from '../application/use-cases/repo-access.js'
+import type { RepoList } from '../application/use-cases/repo-list.js'
 import type { RepoSettings } from '../application/use-cases/repo-settings.js'
 import type { Setup } from '../application/use-cases/setup.js'
 import type { TableGroups } from '../application/use-cases/table-groups.js'
@@ -21,6 +22,7 @@ export interface AppLogger {
 
 export interface CommonDeps {
   repoAccess: RepoAccess
+  repoList: RepoList
   listBranches: ListBranches
   getBranchSchema: GetBranchSchema
   compareBranchSchemas: CompareBranchSchemas

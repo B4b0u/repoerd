@@ -4,6 +4,11 @@ import { APP_REPLACED_PATH, apiPaths, savePositionsBodySchema } from '../src/ind
 const repo = { owner: 'acme', name: 'shop' }
 
 describe('apiPaths', () => {
+  it('builds the favourite and repo-formats paths', () => {
+    expect(apiPaths.favorite({ owner: 'a b', name: 'c' })).toBe('/api/repos/a%20b/c/favorite')
+    expect(apiPaths.repoFormats).toBe('/api/repo-formats')
+  })
+
   it('encodes branch names containing slashes, #, + and accents', () => {
     expect(apiPaths.schema(repo, { branch: 'feature/odd#1+é' })).toBe(
       '/api/repos/acme/shop/schema?branch=feature%2Fodd%231%2B%C3%A9',

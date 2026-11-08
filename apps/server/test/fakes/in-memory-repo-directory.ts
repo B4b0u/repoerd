@@ -18,6 +18,8 @@ export const accessible = (
   defaultBranch: 'main',
   private: false,
   canWrite,
+  pushedAt: null,
+  ownerAvatarUrl: null,
 })
 
 export class InMemoryRepoDirectory implements RepoDirectory {

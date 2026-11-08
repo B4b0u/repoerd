@@ -15,7 +15,14 @@ export class FixtureRepoDirectory implements RepoDirectory {
     const repos = await this.host.listRepositories()
     return {
       accounts: [...new Set(repos.map((repo) => repo.owner))],
-      repos: repos.map((repo) => ({ ...repo, canWrite: true })),
+      repos: await Promise.all(
+        repos.map(async (repo) => ({
+          ...repo,
+          canWrite: true,
+          pushedAt: await this.host.pushedAtOf(repo),
+          ownerAvatarUrl: null,
+        })),
+      ),
     }
   }
 

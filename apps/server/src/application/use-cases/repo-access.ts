@@ -2,7 +2,6 @@ import type { RepoRef } from '@repoerd/model'
 import { isAllowedByOrgs } from '../../domain/orgs.js'
 import { fullName } from '../../domain/repo.js'
 import { err, ok, type Result } from '../../domain/result.js'
-import type { RepoSummary } from '../ports/git-host.js'
 import type { InstanceConfigRepository } from '../ports/instance-config.js'
 import type { LegacyRepoKeys } from '../ports/legacy-repo-keys.js'
 import type { AccessibleRepo, RepoAccessSnapshot, RepoDirectory } from '../ports/repo-directory.js'
@@ -15,11 +14,11 @@ export type RepoAccessError =
   | { kind: 'repo-moved'; owner: string; name: string }
 export type AccessLevel = 'read' | 'write'
 
-/** The id stays internal: the web knows repositories by owner/name only. */
+/** Sorted by owner/name. The id and the GitHub details stay internal: the route maps them to a DTO. */
 export type ListRepositories = (
   userId: string,
   options?: { refresh?: boolean },
-) => Promise<Result<Omit<RepoSummary, 'id'>[], AccessError>>
+) => Promise<Result<AccessibleRepo[], AccessError>>
 export type AuthorizeRepo = (
   userId: string,
   repo: RepoRef,
@@ -60,15 +59,9 @@ export function makeRepoAccess(deps: {
     async listRepositories(userId, options) {
       const access = await snapshot(userId, { refresh: options?.refresh })
       if (!access.ok) return access
-      const repos = access.value.repos.map(
-        ({ owner, name, defaultBranch, private: isPrivate }) => ({
-          owner,
-          name,
-          defaultBranch,
-          private: isPrivate,
-        }),
+      return ok(
+        [...access.value.repos].sort((a, b) => fullName(a).localeCompare(fullName(b), 'en')),
       )
-      return ok(repos.sort((a, b) => fullName(a).localeCompare(fullName(b), 'en')))
     },
 
     async checkUser(userId) {
