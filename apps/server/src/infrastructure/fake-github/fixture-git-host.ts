@@ -11,6 +11,8 @@ interface RepoManifest {
   forkPoints?: Record<string, string>
   /** Earlier owner/name of the repository: they lead here (a renamed repository, fake mode). */
   formerNames?: string[]
+  /** Last push (ISO) shown for the repository; FIXTURE_PUSHED_AT when absent. */
+  pushedAt?: string
 }
 
 interface FixtureRepo {
@@ -37,6 +39,9 @@ export function fixtureRepoId(owner: string, name: string): number {
   return Number.parseInt(hash.slice(0, 12), 16)
 }
 
+/** Fake mode: the last push of a repository whose repo.json declares none. */
+export const FIXTURE_PUSHED_AT = '2026-01-01T00:00:00.000Z'
+
 const toSummary = (repo: FixtureRepo): RepoSummary => ({
   id: fixtureRepoId(repo.owner, repo.name),
   owner: repo.owner,
@@ -54,6 +59,11 @@ export class FixtureGitHost implements GitHost {
 
   async listRepositories(): Promise<RepoSummary[]> {
     return this.repos().map(toSummary)
+  }
+
+  /** The last push of a fixture repository (fake mode), whatever the repository is. */
+  async pushedAtOf(ref: RepoRef): Promise<string> {
+    return this.find(ref)?.manifest.pushedAt ?? FIXTURE_PUSHED_AT
   }
 
   async getRepository(ref: RepoRef): Promise<RepoSummary | null> {

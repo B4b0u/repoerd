@@ -39,10 +39,11 @@ const repositoriesSchema = z.object({
     z.object({
       id: z.number(),
       name: z.string(),
-      owner: z.object({ login: z.string() }),
+      owner: z.object({ login: z.string(), avatar_url: z.string().nullable().optional() }),
       default_branch: z.string(),
       private: z.boolean(),
       permissions: z.object({ push: z.boolean().optional() }).optional(),
+      pushed_at: z.string().nullable().optional(),
     }),
   ),
 })
@@ -254,6 +255,8 @@ export class GitHubRepoDirectory implements RepoDirectory {
           defaultBranch: repo.default_branch,
           private: repo.private,
           canWrite: repo.permissions?.push ?? false,
+          pushedAt: repo.pushed_at ?? null,
+          ownerAvatarUrl: repo.owner.avatar_url ?? null,
         })
       }
     }
