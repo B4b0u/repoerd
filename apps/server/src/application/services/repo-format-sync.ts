@@ -236,11 +236,19 @@ export function makeRepoFormatSync(deps: RepoFormatSyncDeps): RepoFormatSync {
       // A truncated listing may hide sources. One found is kept (a second format may be missed);
       // none found is a failure, and the repository is not checked every hour for it.
       if (truncated && format === 'none') {
-        truncatedUntil.set(key, deps.now().getTime() + RETRY_AFTER_TRUNCATED_MS)
-        deps.logger.info(
-          { repo: label(target) },
-          'The tree of the default branch is truncated and shows no schema: not checked again for 24 hours',
-        )
+        // Sources saved during the check were not read by it: no back-off, the next list checks again.
+        if (staleWhileRunning.has(key)) {
+          deps.logger.info(
+            { repo: label(target) },
+            'The tree of the default branch is truncated and shows no schema: sources changed during the check, checked again at the next list',
+          )
+        } else {
+          truncatedUntil.set(key, deps.now().getTime() + RETRY_AFTER_TRUNCATED_MS)
+          deps.logger.info(
+            { repo: label(target) },
+            'The tree of the default branch is truncated and shows no schema: not checked again for 24 hours',
+          )
+        }
         await deps.formats.markFailed(target, deps.now())
         return
       }

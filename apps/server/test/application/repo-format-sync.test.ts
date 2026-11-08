@@ -483,6 +483,18 @@ describe('repository format sync', () => {
       expect(w.detections.calls).toEqual(['a', 'a'])
     })
 
+    it('is not set when the manual sources change during the check', async () => {
+      const w = world(['a'], { truncated: true, formats: { a: 'none' } })
+      await w.known()
+      await w.sync.markStale(w.byName('a'))
+      await w.sync.idle()
+      expect(w.detections.calls).toEqual(['a'])
+      w.advance(2 * HOUR)
+      await w.known()
+      await w.sync.idle()
+      expect(w.detections.calls).toEqual(['a', 'a'])
+    })
+
     it('is removed once expired, so a later truncated result sets a fresh one', async () => {
       const w = await backedOff()
       w.advance(23 * HOUR)
