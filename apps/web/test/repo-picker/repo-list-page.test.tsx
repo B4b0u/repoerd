@@ -179,6 +179,16 @@ describe('RepoListPage', () => {
     expect((search as HTMLInputElement).value).toBe('/')
   })
 
+  it('leaves the / key to the browser when no search box is shown', async () => {
+    renderPage([])
+    await screen.findByRole('button', { name: 'Refresh the list' })
+    expect(screen.queryByRole('searchbox')).toBeNull()
+    const slash = new KeyboardEvent('keydown', { key: '/', bubbles: true, cancelable: true })
+    document.body.dispatchEvent(slash)
+    // Firefox's Quick Find stays reachable.
+    expect(slash.defaultPrevented).toBe(false)
+  })
+
   it('hides favourites and recents while searching, and offers to clear a search without match', async () => {
     const user = userEvent.setup()
     renderPage()

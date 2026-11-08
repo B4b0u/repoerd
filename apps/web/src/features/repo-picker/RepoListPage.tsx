@@ -176,14 +176,19 @@ export function RepoListPage() {
   )
 }
 
-/** "/" puts the cursor in the search, unless the user is already typing somewhere. */
+/**
+ * "/" puts the cursor in the search, unless the user is already typing somewhere. Without a search
+ * box (error, empty list) the key stays the browser's (Firefox's Quick Find).
+ */
 function useSlashShortcut(target: RefObject<HTMLInputElement | null>) {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== '/' || event.defaultPrevented) return
       if (event.ctrlKey || event.metaKey || event.altKey || isEditing(event.target)) return
+      const input = target.current
+      if (!input) return
       event.preventDefault()
-      target.current?.focus()
+      input.focus()
     }
     document.addEventListener('keydown', onKeyDown)
     return () => document.removeEventListener('keydown', onKeyDown)
