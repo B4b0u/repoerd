@@ -189,7 +189,7 @@ While you can still sign in, the App can also be replaced from `/admin` ("Replac
 - GitHub.com only: GitHub Enterprise Server is not supported.
 - PostgreSQL only. A Drizzle config with another `dialect` is reported as unsupported.
 - One server instance: rate limits, the parsing queue, the repository visibility caches and the background queue that detects each repository's schema format live in memory. That queue reads GitHub with the installation token, at most 2 repositories at a time and 200 per hour, and checks a repository again only after a push.
-- Image size is about 450 MB (the parser ships native binaries).
+- Image size is about 490 MB (the parser ships native binaries).
 
 **Parsing**
 

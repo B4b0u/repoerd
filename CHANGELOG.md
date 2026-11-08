@@ -17,7 +17,7 @@ All notable changes to RepoERD are documented here. The format follows [Keep a C
 ### Changed
 
 - Far out in the overview, group and table names keep a readable size and the names that would overlap are left out until you zoom in, like the labels of a map.
-- The Docker image uses the prebuilt binaries of better-sqlite3 13 instead of compiling them, keeps only the binary of its own platform (about 14 MB smaller), and is based on an updated `node:24-slim` image.
+- The Docker image uses the prebuilt binaries of better-sqlite3 13 instead of compiling them, keeps only the binary of its own platform (about 14 MB less than shipping all eight), and is based on an updated `node:24-slim` image.
 
 ### Fixed
 
