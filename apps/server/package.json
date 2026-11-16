@@ -21,10 +21,10 @@
     "@repoerd/contracts": "workspace:*",
     "@repoerd/model": "workspace:*",
     "@repoerd/schema-core": "workspace:*",
-    "@hono/node-server": "^2.1.5",
-    "better-sqlite3": "^13.0.3",
+    "@hono/node-server": "^2.1.8",
+    "better-sqlite3": "^13.1.1",
     "drizzle-orm": "^0.45.4",
-    "hono": "^4.13.14",
+    "hono": "^4.13.18",
     "pino": "^10.4.0",
     "zod": "^4.6.7"
   },
